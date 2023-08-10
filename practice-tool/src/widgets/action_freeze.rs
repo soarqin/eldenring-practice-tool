@@ -20,8 +20,8 @@ impl ActionFreeze {
         ActionFreeze {
             label: hotkey
                 .as_ref()
-                .map(|hotkey| format!("Action freeze ({})", hotkey))
-                .unwrap_or_else(|| "Action freeze".to_string()),
+                .map(|hotkey| format!("冻结行动 ({})", hotkey))
+                .unwrap_or_else(|| "冻结行动".to_string()),
             ptr,
             state,
             state_on,

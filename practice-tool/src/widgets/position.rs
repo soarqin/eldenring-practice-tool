@@ -80,14 +80,14 @@ impl Widget for SavePosition {
         let _token = ui.begin_disabled(!valid);
         let button_width = super::BUTTON_WIDTH * super::scaling_factor(ui);
 
-        if ui.button_with_size(format!("Load ({})", self.hotkey), [
+        if ui.button_with_size(format!("加载 ({})", self.hotkey), [
             button_width * 0.33 - 4.,
             super::BUTTON_HEIGHT,
         ]) {
             self.load_position();
         }
         ui.same_line();
-        if ui.button_with_size(format!("Save ({} + {})", self.modifier, self.hotkey), [
+        if ui.button_with_size(format!("保存 ({} + {})", self.modifier, self.hotkey), [
             button_width * 0.67 - 4.,
             super::BUTTON_HEIGHT,
         ]) {

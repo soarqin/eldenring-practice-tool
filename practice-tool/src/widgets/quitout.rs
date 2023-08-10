@@ -12,7 +12,7 @@ pub(crate) struct Quitout {
 
 impl Quitout {
     pub(crate) fn new(ptr: PointerChain<u8>, hotkey: KeyState) -> Self {
-        Quitout { label: format!("Quitout ({})", hotkey), ptr, hotkey }
+        Quitout { label: format!("快速退出 ({})", hotkey), ptr, hotkey }
     }
 }
 

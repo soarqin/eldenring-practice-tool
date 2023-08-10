@@ -16,7 +16,7 @@ pub(crate) struct CharacterStatsEdit {
 
 impl CharacterStatsEdit {
     pub(crate) fn new(ptr: PointerChain<CharacterStats>, hotkey_close: KeyState) -> Self {
-        let label_close = format!("Close ({hotkey_close})");
+        let label_close = format!("关闭 ({hotkey_close})");
         CharacterStatsEdit { ptr, stats: None, hotkey_close, label_close }
     }
 }
@@ -32,7 +32,7 @@ impl Widget for CharacterStatsEdit {
             (igGetCursorPosX() + wnd_pos.x, igGetCursorPosY() + wnd_pos.y)
         };
 
-        if ui.button_with_size("Edit stats", [button_width, BUTTON_HEIGHT]) {
+        if ui.button_with_size("修改属性", [button_width, BUTTON_HEIGHT]) {
             self.stats = self.ptr.read();
             debug!("{:?}", self.stats);
         }
@@ -61,38 +61,38 @@ impl Widget for CharacterStatsEdit {
         {
             let _tok = ui.push_item_width(150.);
             if let Some(stats) = self.stats.as_mut() {
-                if ui.input_int("Level", &mut stats.level).build() {
+                if ui.input_int("等级", &mut stats.level).build() {
                     stats.level = stats.level.clamp(1, i32::MAX);
                 }
-                if ui.input_int("Vigor", &mut stats.vigor).build() {
+                if ui.input_int("生命力", &mut stats.vigor).build() {
                     stats.vigor = stats.vigor.clamp(1, 99);
                 }
-                if ui.input_int("Mind", &mut stats.mind).build() {
+                if ui.input_int("集中力", &mut stats.mind).build() {
                     stats.mind = stats.mind.clamp(1, 99);
                 }
-                if ui.input_int("Endurance", &mut stats.endurance).build() {
+                if ui.input_int("耐力", &mut stats.endurance).build() {
                     stats.endurance = stats.endurance.clamp(1, 99);
                 }
-                if ui.input_int("Strength", &mut stats.strength).build() {
+                if ui.input_int("力气", &mut stats.strength).build() {
                     stats.strength = stats.strength.clamp(1, 99);
                 }
-                if ui.input_int("Dexterity", &mut stats.dexterity).build() {
+                if ui.input_int("灵巧", &mut stats.dexterity).build() {
                     stats.dexterity = stats.dexterity.clamp(1, 99);
                 }
-                if ui.input_int("Intelligence", &mut stats.intelligence).build() {
+                if ui.input_int("智力", &mut stats.intelligence).build() {
                     stats.intelligence = stats.intelligence.clamp(1, 99);
                 }
-                if ui.input_int("Faith", &mut stats.faith).build() {
+                if ui.input_int("信仰", &mut stats.faith).build() {
                     stats.faith = stats.faith.clamp(1, 99);
                 }
-                if ui.input_int("Arcane", &mut stats.arcane).build() {
+                if ui.input_int("感应", &mut stats.arcane).build() {
                     stats.arcane = stats.arcane.clamp(1, 99);
                 }
-                if ui.input_int("Runes", &mut stats.runes).build() {
+                if ui.input_int("卢恩", &mut stats.runes).build() {
                     stats.runes = stats.runes.clamp(1, i32::MAX);
                 }
 
-                if ui.button_with_size("Apply", [button_width, super::BUTTON_HEIGHT]) {
+                if ui.button_with_size("应用", [button_width, super::BUTTON_HEIGHT]) {
                     self.ptr.write(stats.clone());
                 }
             }

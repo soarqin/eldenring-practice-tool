@@ -20,8 +20,8 @@ impl Deathcam {
         hotkey: Option<KeyState>,
     ) -> Self {
         let label = match hotkey {
-            Some(k) => format!("Deathcam ({k})"),
-            None => "Deathcam".to_string(),
+            Some(k) => format!("死亡视角 ({k})"),
+            None => "死亡视角".to_string(),
         };
         Deathcam { label, flag, flag_torrent, seven, hotkey }
     }

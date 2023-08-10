@@ -23,14 +23,14 @@ impl NudgePosition {
         nudge_down: Option<KeyState>,
     ) -> Self {
         let nudge_up_label = if let Some(k) = &nudge_up {
-            format!("Nudge up ({})", k)
+            format!("微升 ({})", k)
         } else {
-            "Nudge up".to_string()
+            "微升".to_string()
         };
         let nudge_down_label = if let Some(k) = &nudge_down {
-            format!("Nudge down ({})", k)
+            format!("微降 ({})", k)
         } else {
-            "Nudge down".to_string()
+            "微降".to_string()
         };
         NudgePosition {
             chunk_position,

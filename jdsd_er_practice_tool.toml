@@ -5,18 +5,18 @@ commands = [
   { warp = "yes" },
   { cycle_speed = [1.0, 3.0, 6.0], hotkey = "6" },
   { runes = 10000, hotkey = "7" },
-  { group = "Position storage", commands = [
+  { group = "位置调整", commands = [
     { nudge = 1.0, nudge_up = "[", nudge_down = "]" },
     { position = "H", modifier = "rshift" },
     { position = "J", modifier = "rshift" },
     { position = "K", modifier = "rshift" },
   ]},
-  { group = "Render flags", commands = [
+  { group = "绘制开关", commands = [
     { flag = "hitbox_high", hotkey = "F1" },
     { flag = "hitbox_low", hotkey = "F2" },
     { flag = "hitbox_f" },
     { flag = "hitbox_character", hotkey = "F3" },
-    { flags = ["weapon_hitbox1", "weapon_hitbox2", "weapon_hitbox3"], hotkey = "F4", label = "Weapon hitboxes" },
+    { flags = ["weapon_hitbox1", "weapon_hitbox2", "weapon_hitbox3"], hotkey = "F4", label = "武器碰撞检测框" },
     { flag = "display_stable_pos", hotkey = "F5" },
     { flag = "show_map", hotkey = "F6" },
     { flag = "show_chr", hotkey = "F7" },
@@ -27,21 +27,21 @@ commands = [
   { flag = "no_dead", hotkey = "2" },
   { flag = "no_update_ai", hotkey = "3" },
   { flag = "one_shot", hotkey = "4" },
-  { flags = ["no_goods_consume", "no_arrows_consume"], label = "Inf Consumables" },
+  { flags = ["no_goods_consume", "no_arrows_consume"], label = "物品使用无消耗" },
   { flag = "no_stamina_consume" },
-  { flags = ["no_fp_consume", "no_ashes_of_war_fp_consume"], label = "Inf Focus" },
+  { flags = ["no_fp_consume", "no_ashes_of_war_fp_consume"], label = "专注值无消耗" },
   { flag = "action_freeze", hotkey = "home" },
 
   { flag = "gravity", hotkey = "5" },
   { flag = "torrent_gravity", hotkey = "5" },
-  { flags = ["collision", "torrent_collision"], label = "No Collision" },
+  { flags = ["collision", "torrent_collision"], label = "无碰撞" },
 
   { flag = "deathcam", hotkey = "L" },
 
   { quitout = "P" },
 
   # These flags are currently broken for some reason. TODO investigate.
-  # { flags = ["field_area_direction", "field_area_altimeter" , "field_area_compass"], hotkey = "9", label = "Field area HUD" },
+  # { flags = ["field_area_direction", "field_area_altimeter" , "field_area_compass"], hotkey = "9", label = "场地HUD" },
 ]
 
 [settings]

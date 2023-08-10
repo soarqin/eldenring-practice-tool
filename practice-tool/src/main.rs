@@ -37,7 +37,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 fn err_to_string<T: std::fmt::Display>(e: T) -> String {
-    format!("Error: {}", e)
+    format!("错误: {}", e)
 }
 
 fn get_current_version() -> Version {
@@ -83,17 +83,16 @@ fn check_eac(handle: HANDLE) -> Result<bool, String> {
     debug!("{steam_appid_path:?} {}", steam_appid_path.exists());
     if !steam_appid_path.exists() {
         unsafe {
-            let text = w!("The practice tool can't start if the EAC bypass is not applied.\n\nNo \
-                           worries! I can apply that for you.\n\nPlease close the game, press \
-                           \"Ok\", and pick the eldenring.exe file you want to apply the bypass \
-                           to.");
+            let text = w!("如果不绕过EAC启动游戏无法启用练习工具。\n\n\
+                           别担心！我们可以帮你搞定他。\n\n请关闭游戏，点击\"Ok\", \
+                           然后选择你要绕过EAC的游戏eldenring.exe主文件。");
             let caption = w!("EAC was not bypassed");
             MessageBoxW(HWND(0), text, caption, MB_ICONERROR);
 
             let mut file_path = [0u16; 256];
             let mut open_file_name = OPENFILENAMEW {
                 lStructSize: mem::size_of::<OPENFILENAMEW>() as u32,
-                lpstrFilter: w!("Elden Ring executable (eldenring.exe)\0eldenring.exe\0\0"),
+                lpstrFilter: w!("Elden Ring 可执行文件 (eldenring.exe)\0eldenring.exe\0\0"),
                 nMaxCustFilter: 0,
                 nFilterIndex: 0,
                 lpstrFile: PWSTR(file_path.as_mut_ptr()),
@@ -113,18 +112,17 @@ fn check_eac(handle: HANDLE) -> Result<bool, String> {
                     .create(true)
                     .write(true)
                     .open(steam_appid_path)
-                    .map_err(|e| format!("Couldn't open steam_appid.txt: {e}"))?;
+                    .map_err(|e| format!("无法打开 steam_appid.txt: {e}"))?;
                 file.write_all(b"1245620")
-                    .map_err(|e| format!("Couldn't write steam_appid.txt: {e}"))?;
+                    .map_err(|e| format!("无法写入 steam_appid.txt: {e}"))?;
 
-                let text = w!("EAC is now bypassed. You can now restart the game and the tool.");
-                let caption = w!("EAC bypassed");
+                let text = w!("已绕过EAC。现在你可以重启游戏并运行练习工具了。");
+                let caption = w!("已绕过EAC");
                 MessageBoxW(HWND(0), text, caption, MB_ICONINFORMATION);
             } else {
-                let text = w!("EAC bypass was not applied. Please either re-run the tool to \
-                               automatically apply the bypass, or apply it manually.\n\
-                               Read more at:\nhttps://wiki.speedsouls.com/eldenring:EAC_Bypass");
-                let caption = w!("EAC was not bypassed");
+                let text = w!("无法绕过EAC。请重新运行工具，或者手动绕过。\n\
+                               请参考: \nhttps://wiki.speedsouls.com/eldenring:EAC_Bypass");
+                let caption = w!("未能绕过EAC");
                 MessageBoxW(HWND(0), text, caption, MB_ICONERROR);
             }
 
@@ -147,12 +145,12 @@ fn perform_injection() -> Result<(), String> {
     }
 
     let dll_path = dll_path.canonicalize().map_err(err_to_string)?;
-    trace!("Injecting {:?}", dll_path);
+    trace!("注入 {:?}", dll_path);
 
     let process = OwnedProcess::find_first_by_name("eldenring.exe")
-        .ok_or_else(|| "Could not find process".to_string())?;
+        .ok_or_else(|| "找不到进程".to_string())?;
 
-    trace!("Checking EAC...");
+    trace!("检查 EAC...");
     if check_eac(HANDLE(process.as_raw_handle() as _))? {
         return Ok(());
     }
@@ -160,9 +158,7 @@ fn perform_injection() -> Result<(), String> {
     let syringe = Syringe::for_process(process);
     syringe.inject(dll_path).map_err(|e| {
         format!(
-            "Could not hook the practice tool: {e}.\n\nPlease make sure you have
-            no antiviruses running, EAC is properly bypassed, and you are
-            running an unmodded and legitimate version of the game."
+            "无法注入练习工具: {e}.\n\n请确认你已经关闭了杀毒软件，绕过了EAC启动游戏，并且运行了未MOD的正版游戏。"
         )
     })?;
 
@@ -188,9 +184,8 @@ fn main() {
         Ok((latest_version, download_url, release_notes)) => {
             if latest_version > current_version {
                 let update_msg = format!(
-                    "A new version of the practice tool is available!\n\nLatest version: \
-                     {}\nInstalled version: {}\n\nRelease notes:\n{}\n\nDo you want to download \
-                     the update?\0",
+                    "练习工具有更新!\n\n最新的版本: \
+                     {}\n已安装版本: {}\n\n更新日志:\n{}\n\n你要下载更新吗?\0",
                     latest_version, current_version, release_notes
                 );
 
@@ -198,7 +193,7 @@ fn main() {
                     MessageBoxA(
                         HWND(0),
                         PCSTR(update_msg.as_str().as_ptr()),
-                        PCSTR("Update available\0".as_ptr()),
+                        PCSTR("有可用的更新\0".as_ptr()),
                         MB_YESNO | MB_ICONINFORMATION,
                     )
                 };
@@ -209,12 +204,12 @@ fn main() {
             }
         },
         Err(e) => {
-            let error_msg = format!("Could not check for a new version: {}\0", e);
+            let error_msg = format!("无法检查版本更新: {}\0", e);
             unsafe {
                 MessageBoxA(
                     HWND(0),
                     PCSTR(error_msg.as_str().as_ptr()),
-                    PCSTR("Error\0".as_ptr()),
+                    PCSTR("错误\0".as_ptr()),
                     MB_OK | MB_ICONERROR,
                 );
             }
@@ -228,7 +223,7 @@ fn main() {
             MessageBoxA(
                 HWND(0),
                 PCSTR(error_msg.as_str().as_ptr()),
-                PCSTR("Error\0".as_ptr()),
+                PCSTR("错误\0".as_ptr()),
                 MB_OK | MB_ICONERROR,
             );
         }

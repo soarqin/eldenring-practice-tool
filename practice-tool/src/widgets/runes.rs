@@ -13,7 +13,7 @@ pub(crate) struct Runes {
 
 impl Runes {
     pub(crate) fn new(amount: u32, ptr: PointerChain<u32>, hotkey: KeyState) -> Self {
-        Runes { label: format!("Add {} Runes ({})", amount, hotkey), ptr, hotkey, amount }
+        Runes { label: format!("添加{}卢恩 ({})", amount, hotkey), ptr, hotkey, amount }
     }
 
     fn add(&self) -> Option<u32> {

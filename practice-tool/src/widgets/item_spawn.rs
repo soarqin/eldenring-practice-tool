@@ -12,19 +12,19 @@ use super::{scaling_factor, string_match, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 use crate::util::KeyState;
 
 static AFFINITIES: [(u32, &str); 13] = [
-    (0, "No affinity"),
-    (100, "Heavy"),
-    (200, "Keen"),
-    (300, "Quality"),
-    (400, "Fire"),
-    (500, "Flame Art"),
-    (600, "Lightning"),
-    (700, "Sacred"),
-    (800, "Magic"),
-    (900, "Cold"),
-    (1000, "Poison"),
-    (1100, "Blood"),
-    (1200, "Occult"),
+    (0, "无质变"),
+    (100, "厚重"),
+    (200, "锋利"),
+    (300, "优质"),
+    (400, "火焰"),
+    (500, "焰术"),
+    (600, "雷电"),
+    (700, "神圣"),
+    (800, "魔力"),
+    (900, "寒冷"),
+    (1000, "毒"),
+    (1100, "血"),
+    (1200, "神秘"),
 ];
 
 static UPGRADES: [(u32, &str); 26] = [
@@ -178,8 +178,8 @@ impl ItemSpawner<'_> {
         hotkey_load: KeyState,
         hotkey_close: KeyState,
     ) -> Self {
-        let label_load = format!("Spawn item ({hotkey_load})");
-        let label_close = format!("Close ({hotkey_close})");
+        let label_load = format!("生成物品 ({hotkey_load})");
+        let label_close = format!("关闭 ({hotkey_close})");
         ItemSpawner {
             func_ptr,
             map_item_man,
@@ -200,7 +200,7 @@ impl ItemSpawner<'_> {
 
     fn spawn(&mut self) {
         if self.sentinel.get().is_none() {
-            self.write_log("Not spawning item when not in game".into());
+            self.write_log("不在游戏中未能生成物品".into());
             return;
         }
 
@@ -215,7 +215,7 @@ impl ItemSpawner<'_> {
         };
 
         self.write_log(format!(
-            "Spawning {} #{} {} {}",
+            "生成 {} #{} {} {}",
             i.qty, self.item_id, UPGRADES[self.upgrade].1, AFFINITIES[self.affinity].1,
         ));
 
@@ -247,7 +247,7 @@ impl Widget for ItemSpawner<'_> {
             (igGetCursorPosX() + wnd_pos.x, igGetCursorPosY() + wnd_pos.y)
         };
 
-        if ui.button_with_size("Spawn item", [button_width, BUTTON_HEIGHT]) {
+        if ui.button_with_size("生成物品", [button_width, BUTTON_HEIGHT]) {
             ui.open_popup(ISP_TAG);
         }
 
@@ -274,7 +274,7 @@ impl Widget for ItemSpawner<'_> {
             {
                 let _tok = ui.push_item_width(-1.);
                 if InputText::new(ui, "##item-spawn-filter", &mut self.filter_string)
-                    .hint("Filter...")
+                    .hint("过滤器...")
                     .build()
                 {
                     self.item_id_tree =
@@ -298,12 +298,12 @@ impl Widget for ItemSpawner<'_> {
                 Cow::Borrowed(label)
             });
 
-            ui.slider_config("Qty", 1, 99).build(&mut self.qty);
+            ui.slider_config("数量", 1, 99).build(&mut self.qty);
             if ui.button_with_size(&self.label_load, [400., button_height]) {
                 self.spawn();
             }
 
-            if ui.button_with_size("Clear", [400., button_height]) {
+            if ui.button_with_size("清除", [400., button_height]) {
                 self.filter_string.clear();
                 self.qty = 1;
                 self.item_id = 0x40000000 + 2919;
@@ -341,7 +341,7 @@ struct ItemSpawnInstance {
 
 impl Display for ItemSpawnInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:08x} (qty={})", self.item_id, self.qty,)
+        write!(f, "{:08x} (数量={})", self.item_id, self.qty,)
     }
 }
 

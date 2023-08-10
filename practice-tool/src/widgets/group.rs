@@ -18,7 +18,7 @@ impl Group {
         Self {
             label: label.to_string(),
             tag: format!("##group-{label}"),
-            label_close: format!("Close ({hotkey_close})"),
+            label_close: format!("关闭 ({hotkey_close})"),
             hotkey_close,
             commands,
         }

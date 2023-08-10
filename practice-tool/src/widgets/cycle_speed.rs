@@ -41,9 +41,9 @@ impl Widget for CycleSpeed {
         let _token = ui.begin_disabled(speed.is_none());
 
         let label = if let Some(speed) = speed {
-            format!("Speed [{:.1}x] ({})", speed, self.hotkey)
+            format!("速度 [{:.1}x] ({})", speed, self.hotkey)
         } else {
-            format!("Speed ({})", self.hotkey)
+            format!("速度 ({})", self.hotkey)
         };
 
         if ui.button_with_size(label, [
