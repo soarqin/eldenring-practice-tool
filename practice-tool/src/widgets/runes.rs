@@ -12,7 +12,7 @@ struct Runes {
 
 impl Runes {
     fn new(amount: u32, ptr: PointerChain<u32>) -> Self {
-        Self { ptr, current: 0, amount, label: format!("Add {amount} runes") }
+        Self { ptr, current: 0, amount, label: format!("添加 {amount} 卢恩") }
     }
 }
 
