@@ -1,4 +1,6 @@
+use std::env;
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -75,15 +77,15 @@ impl PracticeTool {
                     path.push("jdsd_er_practice_tool.toml");
                     path
                 })
-                .ok_or_else(|| "Couldn't find config file".to_string())?;
+                .ok_or_else(|| "找不到设置文件".to_string())?;
 
             if !config_path.exists() {
                 std::fs::write(&config_path, include_str!("../../jdsd_er_practice_tool.toml"))
-                    .map_err(|e| format!("Couldn't write default config file: {}", e))?;
+                    .map_err(|e| format!("找不到设置文件: {}", e))?;
             }
 
             let config_content = std::fs::read_to_string(config_path)
-                .map_err(|e| format!("Couldn't read config file: {}", e))?;
+                .map_err(|e| format!("无法读取设置文件: {}", e))?;
             println!("{}", config_content);
             Config::parse(&config_content).map_err(String::from)
         }
@@ -95,8 +97,7 @@ impl PracticeTool {
                 Some({
                     error!("{}", e);
                     format!(
-                        "Configuration error, please review your jdsd_er_practice_tool.toml \
-                         file.\n\n{e}"
+                        "设置错误，请检查jdsd_er_practice_tool.toml的内容\n\n{e}"
                     )
                 }),
             ),
@@ -135,8 +136,8 @@ impl PracticeTool {
                     .init();
             },
             e => match e {
-                None => error!("Could not construct log file path"),
-                Some(Err(e)) => error!("Could not initialize log file: {:?}", e),
+                None => error!("无法创建log文件目录"),
+                Some(Err(e)) => error!("无法初始化log文件: {:?}", e),
                 _ => unreachable!(),
             },
         }
@@ -172,12 +173,12 @@ impl PracticeTool {
         let pointers = Pointers::new();
         let version_label = {
             let (maj, min, patch) = (*VERSION).into();
-            format!("Game Ver {}.{:02}.{}", maj, min, patch)
+            format!("游戏版本 {}.{:02}.{}", maj, min, patch)
         };
         let settings = config.settings.clone();
         let widgets = config.make_commands(&pointers);
         let (log_tx, log_rx) = crossbeam_channel::unbounded();
-        info!("Practice tool initialized");
+        info!("练习工具初始化完毕");
 
         PracticeTool {
             settings,
@@ -229,14 +230,14 @@ impl PracticeTool {
                     w.render(ui);
                 }
 
-                if ui.button_with_size("Close", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
+                if ui.button_with_size("关闭", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
                 {
                     self.ui_state = UiState::Closed;
                     self.pointers.cursor_show.set(false);
                 }
 
                 if option_env!("CARGO_XTASK_DIST").is_none()
-                    && ui.button_with_size("Eject", [
+                    && ui.button_with_size("卸载", [
                         BUTTON_WIDTH * scaling_factor(ui),
                         BUTTON_HEIGHT,
                     ])
@@ -267,17 +268,17 @@ impl PracticeTool {
                     | WindowFlags::ALWAYS_AUTO_RESIZE
             })
             .build(|| {
-                ui.text("johndisandonato's Practice Tool");
+                ui.text("johndisandonato的练习工具");
 
                 // ui.same_line();
 
-                if ui.small_button("Open") {
+                if ui.small_button("打开") {
                     self.ui_state = UiState::MenuOpen;
                 }
 
                 ui.same_line();
 
-                if ui.small_button("Indicators") {
+                if ui.small_button("指示器") {
                     ui.open_popup("##indicators_window");
                 }
 
@@ -291,22 +292,20 @@ impl PracticeTool {
                         self.pointers.cursor_show.set(true);
 
                         ui.text(
-                            "You can toggle indicators here, as\nwell as reset the frame \
-                             counter.\n\nKeep in mind that the available\nindicators and order of \
-                             them depend\non your config file.",
+                            "你可以在这里切换指示器开关，\n重置帧数计数值。\n\n注意，指示器列表和顺序是由\n你的配置文件决定的。",
                         );
                         ui.separator();
 
                         for indicator in &mut self.settings.indicators {
                             let label = match indicator.indicator {
-                                IndicatorType::GameVersion => "Game Version",
-                                IndicatorType::Position => "Player Position",
-                                IndicatorType::PositionChange => "Player Velocity",
-                                IndicatorType::Animation => "Animation",
-                                IndicatorType::Igt => "IGT Timer",
+                                IndicatorType::GameVersion => "游戏版本",
+                                IndicatorType::Position => "玩家位置",
+                                IndicatorType::PositionChange => "玩家速度",
+                                IndicatorType::Animation => "动画",
+                                IndicatorType::Igt => "游戏内时间(IGT)",
                                 IndicatorType::Fps => "FPS",
-                                IndicatorType::FrameCount => "Frame Counter",
-                                IndicatorType::ImguiDebug => "ImGui Debug Info",
+                                IndicatorType::FrameCount => "帧数计数器",
+                                IndicatorType::ImguiDebug => "ImGui调试信息",
                             };
 
                             let mut state = indicator.enabled;
@@ -318,7 +317,7 @@ impl PracticeTool {
                             if let IndicatorType::FrameCount = indicator.indicator {
                                 ui.same_line();
 
-                                let btn_reset_label = "Reset";
+                                let btn_reset_label = "重置";
                                 let btn_reset_width = ui.calc_text_size(btn_reset_label)[0]
                                     + style.frame_padding[0] * 2.0;
 
@@ -327,7 +326,7 @@ impl PracticeTool {
                                     ui.cursor_pos()[1],
                                 ]);
 
-                                if ui.button("Reset") {
+                                if ui.button("重置") {
                                     self.framecount = 0;
                                 }
                             }
@@ -338,7 +337,7 @@ impl PracticeTool {
                         let btn_close_width =
                             ui.content_region_max()[0] - style.frame_padding[0] * 2.0;
 
-                        if ui.button_with_size("Close", [btn_close_width, 0.0]) {
+                        if ui.button_with_size("关闭", [btn_close_width, 0.0]) {
                             ui.close_current_popup();
                             self.pointers.cursor_show.set(false);
                         }
@@ -346,7 +345,7 @@ impl PracticeTool {
 
                 ui.same_line();
 
-                if ui.small_button("Help") {
+                if ui.small_button("帮助") {
                     ui.open_popup("##help_window");
                 }
 
@@ -381,19 +380,17 @@ impl PracticeTool {
                     .build(|| {
                         self.pointers.cursor_show.set(true);
                         ui.text(formatcp!(
-                            "Elden Ring Practice Tool v{}.{}.{}",
+                            "艾尔登法环练习工具 v{}.{}.{}",
                             MAJOR,
                             MINOR,
                             PATCH
                         ));
                         ui.separator();
                         ui.text(format!(
-                            "Press the {} key to open/close the tool's\ninterface.\n\nYou can \
-                             toggle flags/launch commands by\nclicking in the UI or by \
-                             pressing\nthe hotkeys (in the parentheses).\n\nYou can configure \
-                             your tool by editing\nthe jdsd_er_practice_tool.toml file with\na \
-                             text editor. If you break something,\njust download a fresh \
-                             file!\n\nThank you for using my tool! <3\n",
+                            "请按{}键开关工具界面。\n\n你可以点击UI按键或者按下快捷键(方括号内)切换\
+                             功能/运行指令\n\n你可以用文本编辑器修改jdsd_er_practice_tool.toml配置\
+                             工具的功能。\n如果不小心改坏了配置文件，可以下载原始的配置文件覆盖\n\n\
+                             感谢使用我的工具! <3\n",
                             self.settings.display
                         ));
                         ui.separator();
@@ -403,14 +400,14 @@ impl PracticeTool {
                             open::that("https://twitch.tv/johndisandonato").ok();
                         }
                         ui.separator();
-                        if ui.button("Submit issue") {
+                        if ui.button("提交问题") {
                             open::that(
                                 "https://github.com/veeenu/eldenring-practice-tool/issues/new",
                             )
                             .ok();
                         }
                         ui.same_line();
-                        if ui.button("Support") {
+                        if ui.button("赞助") {
                             open::that("https://patreon.com/johndisandonato").ok();
                         }
                         ui.same_line();
@@ -700,21 +697,62 @@ impl ImguiRenderLoop for PracticeTool {
 
     fn initialize(&mut self, ctx: &mut Context, _: &mut dyn RenderContext) {
         let fonts = ctx.fonts();
+        let config_small = FontConfig {
+            size_pixels: 11.,
+            oversample_h: 2,
+            oversample_v: 1,
+            pixel_snap_h: false,
+            glyph_extra_spacing: [0., 0.],
+            glyph_offset: [0., 0.],
+            glyph_ranges: imgui::FontGlyphRanges::chinese_full(),
+            glyph_min_advance_x: 0.,
+            glyph_max_advance_x: f32::MAX,
+            font_builder_flags: 0,
+            rasterizer_multiply: 1.,
+            ellipsis_char: None,
+            name: Some(String::from("Chinese Font")),
+        };
+        let mut config_normal = config_small.clone();
+        config_normal.size_pixels = 18.;
+        let mut config_big = config_small.clone();
+
+        let mut system_font_dir = "C:\\Windows\\Fonts".to_string();
+        match env::var_os("windir") {
+            Some(x) => {
+                let path = PathBuf::from(x).join("Fonts");
+                if path.is_dir() {
+                    system_font_dir = path.to_str().unwrap().into();
+                }
+            },
+            None => {},
+        };
+        let mut font_data = Vec::new();
+        for filename in ["dengb.ttf", "deng.ttf", "msyh.ttc", "msjhbd.ttc", "msjh.ttc", "simsun.ttc", "mingliub.ttc"] {
+            let path = format!("{}\\{}", system_font_dir, filename);
+            match std::fs::read(path) {
+                Ok(data) => {
+                    font_data = data;
+                    break;
+                },
+                Err(_) => {},
+            }
+        }
+        config_big.size_pixels = 24.;
         self.fonts = Some(FontIDs {
             small: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: &font_data[..],
                 size_pixels: 11.,
-                config: None,
+                config: Some(config_small),
             }]),
             normal: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: &font_data[..],
                 size_pixels: 18.,
-                config: None,
+                config: Some(config_normal),
             }]),
             big: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: &font_data[..],
                 size_pixels: 24.,
-                config: None,
+                config: Some(config_big),
             }]),
         });
     }
