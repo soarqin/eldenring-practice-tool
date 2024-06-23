@@ -27,16 +27,16 @@ fn perform_injection() -> Result<()> {
     let process = Process::by_name("eldenring.exe").map_err(|_| {
         anyhow!(dedent!(
             r#"
-            Could not find the ELDEN RING process.
+            找不到艾尔登法环进程。
 
-            If it is not running, start it.
+            请先确认已经启动游戏。
             
-            If you have and it's not working, make sure to follow these steps:
-            - Disable running antivirus software, uninstall any mods and stop overlay programs (RTSS/FRAPS).
-            - Start Steam (offline mode is fine).
-            - Double-click eldenring.exe
-              (Steam > ELDEN RING > Manage > Browse Local Files).
-            - Double-click jdsd_er_practice_tool.exe.
+            如果游戏已经启动但依然未正常工作，确认遵循以下步骤：
+            - 禁用杀毒软件并卸载所有mod，停用所有游戏内覆盖显示工具（RTSS/FRAPS等）
+            - 启动Steam (可以离线模式)
+            - 双击 eldenring.exe
+              (Steam > 艾尔登法环 > 管理 > 浏览本地文件)
+            - 双击 jdsd_er_practice_tool.exe
             "#
         )
         .trim())
@@ -58,9 +58,9 @@ fn perform_injection() -> Result<()> {
     debug!("Injecting {:?}...", dll_path);
     process.inject(dll_path).map_err(|e| {
         anyhow!(
-            "Could not hook the practice tool: {e}.\n\nPlease make sure you have no antiviruses \
-             running, EAC is properly bypassed, no other overlay tools like FRAPS and RTSS are \
-             running, and you are running an unmodded and legitimate version of the game."
+            "无法注入练习工具: {e}.\n\n请确保你禁用了杀毒软件，\
+             绕过了EAC(小蓝熊)，并且运行了未打mod的原版游戏，且\
+             停用了所有游戏内覆盖显示工具（RTSS/FRAPS等）。"
         )
     })?;
 
@@ -91,7 +91,7 @@ fn main() -> Result<()> {
     }
 
     if let Err(e) = perform_injection() {
-        message_box("Error", e.to_string(), MB_OK | MB_ICONERROR);
+        message_box("错误", e.to_string(), MB_OK | MB_ICONERROR);
     }
 
     Ok(())

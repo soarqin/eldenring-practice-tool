@@ -15,22 +15,22 @@ impl Stats for CharacterStatsEdit {
     fn data(&mut self) -> Option<impl Iterator<Item = Datum>> {
         self.stats.as_mut().map(|s| {
             let mut stats_data = vec![
-                Datum::int("Level", &mut s.level, 1, 713),
-                Datum::int("Vigor", &mut s.vigor, 1, 99),
-                Datum::int("Mind", &mut s.mind, 1, 99),
-                Datum::int("Endurance", &mut s.endurance, 1, 99),
-                Datum::int("Strength", &mut s.strength, 1, 99),
-                Datum::int("Dexterity", &mut s.dexterity, 1, 99),
-                Datum::int("Intelligence", &mut s.intelligence, 1, 99),
-                Datum::int("Faith", &mut s.faith, 1, 99),
-                Datum::int("Arcane", &mut s.arcane, 1, 99),
-                Datum::int("Souls", &mut s.runes, 0, i32::MAX),
+                Datum::int("等级", &mut s.level, 1, 713),
+                Datum::int("生命力", &mut s.vigor, 1, 99),
+                Datum::int("集中力", &mut s.mind, 1, 99),
+                Datum::int("耐力", &mut s.endurance, 1, 99),
+                Datum::int("力气", &mut s.strength, 1, 99),
+                Datum::int("灵巧", &mut s.dexterity, 1, 99),
+                Datum::int("智力", &mut s.intelligence, 1, 99),
+                Datum::int("信仰", &mut s.faith, 1, 99),
+                Datum::int("感应", &mut s.arcane, 1, 99),
+                Datum::int("卢恩", &mut s.runes, 0, i32::MAX),
             ];
 
             if let Some(b) = self.blessings.as_mut() {
                 stats_data.append(&mut vec![
-                    Datum::byte("Scadutree Blessing", &mut b.scadutree, 0, 20),
-                    Datum::byte("Revered Spirit Ash", &mut b.revered_spirit_ash, 0, 10),
+                    Datum::byte("幽影树庇佑", &mut b.scadutree, 0, 20),
+                    Datum::byte("灵灰庇佑", &mut b.revered_spirit_ash, 0, 10),
                 ]);
             }
             stats_data.into_iter()
