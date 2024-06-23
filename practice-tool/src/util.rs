@@ -25,7 +25,7 @@ pub fn message_box<S: AsRef<str>, T: AsRef<str>>(
     text: T,
     style: MESSAGEBOX_STYLE,
 ) -> MESSAGEBOX_RESULT {
-    let caption = OsStr::new("Elden Ring Practice Tool - ")
+    let caption = OsStr::new("艾尔登法环练习工具 - ")
         .encode_wide()
         .chain(OsStr::new(caption.as_ref()).encode_wide())
         .chain(Some(0))
@@ -90,7 +90,7 @@ pub fn get_game_directory(process: &Process) -> Result<PathBuf> {
 
     exe_path
         .parent()
-        .ok_or_else(|| anyhow!("Couldn't find executable's parent directory"))
+        .ok_or_else(|| anyhow!("无法找到可执行文件的父目录"))
         .map(|p| p.to_path_buf())
 }
 
@@ -102,8 +102,8 @@ pub fn check_eac(process: &Process) -> Result<bool> {
     debug!("Steam AppID path: {steam_appid_path:?} exists? {}", steam_appid_path.exists());
     if !steam_appid_path.exists() {
         message_box(
-            "EAC was not bypassed",
-            "The EAC bypass is not applied.\n\nNo worries! I can apply that for you.",
+            "未绕过EAC(小蓝熊)",
+            "你还没有绕过EAC(小蓝熊)\n\n别担心，我们会帮你搞定它！",
             MB_ICONERROR,
         );
         let mut file = OpenOptions::new()
@@ -111,13 +111,12 @@ pub fn check_eac(process: &Process) -> Result<bool> {
             .truncate(true)
             .write(true)
             .open(steam_appid_path)
-            .context("Couldn't open steam_appid.txt")?;
-        file.write_all(b"1245620").context("Couldn't write steam_appid.txt")?;
+            .context("无法打开 steam_appid.txt")?;
+        file.write_all(b"1245620").context("无法写入 steam_appid.txt")?;
 
         message_box(
-            "EAC bypassed",
-            "EAC is now bypassed successfully!\n\nRestart the game and the practice \
-             tool.\n\nRemember to double-click eldenring.exe.",
+            "已绕过EAC(小蓝熊)",
+            "已成功绕过EAC(小蓝熊)！\n\n请重启游戏和练习工具。\n\n记住要双击eldenring.exe启动游戏。",
             MB_ICONINFORMATION,
         );
 
