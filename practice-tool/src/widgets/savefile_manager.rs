@@ -21,5 +21,5 @@ fn get_savefile_path() -> Result<PathBuf, String> {
         .find(|e| re.is_match(&e.file_name().to_string_lossy()) && e.path().is_dir())
         .map(|e| e.path())
         .map(|p| p.join("ER0000.sl2"))
-        .ok_or_else(|| String::from("Couldn't find savefile path"))
+        .ok_or_else(|| String::from("找不到存档路径"))
 }
