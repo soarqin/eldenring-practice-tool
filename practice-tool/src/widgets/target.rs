@@ -117,8 +117,8 @@ impl Target {
 
         Target {
             label: hotkey
-                .map(|k| format!("Target entity info ({k})"))
-                .unwrap_or_else(|| "Target entity info".to_string()),
+                .map(|k| format!("目标单位信息 ({k})"))
+                .unwrap_or_else(|| "目标单位信息".to_string()),
             alloc_addr,
             detour_addr,
             detour_orig_data: Default::default(),
@@ -249,7 +249,7 @@ impl Widget for Target {
             self.get_data()
         else {
             if self.is_enabled {
-                ui.text("No enemy locked on")
+                ui.text("未锁定敌人")
             };
             return;
         };
@@ -323,25 +323,25 @@ impl Widget for Target {
             ProgressBar::new(pct).size(pbar_size).overlay_text("").build(ui);
         };
 
-        pbar(text, "HP", hp, max_hp, COLOR_HP);
-        pbar(text, "SP", sp, max_sp, COLOR_SP);
+        pbar(text, "血量", hp, max_hp, COLOR_HP);
+        pbar(text, "精力", sp, max_sp, COLOR_SP);
         pbar(text, "MP", mp, max_mp, COLOR_MP);
 
         text.clear();
-        write!(text, "Poise    {poise:>6.0}/{poise_max:>6.0} {poise_time:.2}s").ok();
+        write!(text, "韧性    {poise:>6.2}/{poise_max:>6.0} {poise_time:.2}s").ok();
         ui.text(&*text);
         let pct = if poise_max.abs() < 0.0001 { 0.0 } else { poise / poise_max };
         let tok = ui.push_style_color(StyleColor::PlotHistogram, COLOR_BASE);
         ProgressBar::new(pct).size(pbar_size).overlay_text("").build(ui);
         drop(tok);
 
-        pbar(text, "Poison", poison, poison_max, COLOR_POISON);
-        pbar(text, "Rot", rot, rot_max, COLOR_ROT);
-        pbar(text, "Bleed", bleed, bleed_max, COLOR_BLEED);
-        pbar(text, "Blight", blight, blight_max, COLOR_BLIGHT);
-        pbar(text, "Frost", frost, frost_max, COLOR_FROST);
-        pbar(text, "Sleep", sleep, sleep_max, COLOR_SLEEP);
-        pbar(text, "Mad", mad, mad_max, COLOR_MAD);
+        pbar(text, "中毒", poison, poison_max, COLOR_POISON);
+        pbar(text, "腐败", rot, rot_max, COLOR_ROT);
+        pbar(text, "出血", bleed, bleed_max, COLOR_BLEED);
+        pbar(text, "死亡", blight, blight_max, COLOR_BLIGHT);
+        pbar(text, "冻伤", frost, frost_max, COLOR_FROST);
+        pbar(text, "催眠", sleep, sleep_max, COLOR_SLEEP);
+        pbar(text, "发狂", mad, mad_max, COLOR_MAD);
 
         ui.new_line();
 
@@ -370,7 +370,7 @@ impl Widget for Target {
             relative_angle -= PI;
 
             text.clear();
-            write!(text, "{distance:>6.3}m {:>8.3}deg", relative_angle * 180.0 / PI).unwrap();
+            write!(text, "{distance:>6.3}米 {:>8.3}度", relative_angle * 180.0 / PI).unwrap();
             ui.text(&*text);
             ui.same_line();
             let [_, text_height] = ui.calc_text_size(&*text);

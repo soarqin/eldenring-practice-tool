@@ -7,6 +7,8 @@ use crate::fonts::{request_text, text_ready};
 pub(super) fn display_text<'a>(ui: &Ui, text: &'a str) -> &'a str {
     if text_ready(ui, text) {
         text
+    } else if text_ready(ui, "加载中...") {
+        "加载中..."
     } else {
         "Loading..."
     }
@@ -46,6 +48,8 @@ impl InputTextCallbackHandler for &mut InputFontState<'_> {
 
 pub(super) fn filter_input(ui: &Ui, label: &str, hint: &str, text: &mut String) -> bool {
     debug_assert!(label.starts_with("##"), "filter_input requires a hidden label");
+    request_text(ui, hint);
+    let hint = display_text(ui, hint);
     let color = ui.style_color(StyleColor::Text);
     let hint_color = ui.style_color(StyleColor::TextDisabled);
     let width = ui.calc_item_width();
@@ -98,6 +102,61 @@ mod tests {
                 quad.iter().zip(corners).all(|(vertex, expected)| vertex.uv == expected)
             })
         })
+    }
+
+    #[test]
+    fn pending_chinese_hint_uses_loading_before_and_after_cancel() {
+        let _lock = crate::fonts::IMGUI_TEST_LOCK.lock().unwrap();
+        crate::fonts::FontFallback::default().reset();
+        let mut ctx = imgui::Context::create();
+        ctx.set_ini_filename(None);
+        ctx.io_mut().display_size = [400., 300.];
+        ctx.io_mut().delta_time = 1. / 60.;
+        ctx.io_mut().config_input_trickle_event_queue = false;
+        ctx.fonts().build_rgba32_texture();
+        let mut text = String::new();
+        let mut fallback_uv = [0.; 4];
+        let mut loading_uv = [0.; 4];
+
+        for frame in 0..5 {
+            if frame == 2 {
+                ctx.io_mut().add_input_character('A');
+            } else if frame == 3 || frame == 4 {
+                ctx.io_mut().add_key_event(imgui::Key::Escape, frame == 3);
+            }
+            let ui = ctx.frame();
+            ui.window("##hint-test")
+                .position([10., 10.], imgui::Condition::Always)
+                .size([300., 100.], imgui::Condition::Always)
+                .title_bar(false)
+                .build(|| {
+                    if frame == 0 {
+                        ui.set_keyboard_focus_here();
+                    }
+                    assert!(!text_ready(ui, "筛选..."));
+                    assert_eq!(display_text(ui, "筛选..."), "Loading...");
+                    filter_input(ui, "##filter", "筛选...", &mut text);
+                    assert_eq!(text, if frame == 2 { "A" } else { "" });
+                    if frame == 1 {
+                        assert!(ui.is_item_active());
+                    } else if frame == 3 {
+                        assert!(!ui.is_item_active());
+                    }
+                    let font = ui.current_font() as *const imgui::Font as *mut sys::ImFont;
+                    let uv = |character| unsafe {
+                        let glyph = &*sys::ImFont_FindGlyph(font, character);
+                        [glyph.U0, glyph.V0, glyph.U1, glyph.V1]
+                    };
+                    fallback_uv = uv('筛' as u32);
+                    loading_uv = uv('L' as u32);
+                });
+            let draw = ctx.render();
+            if [1, 3, 4].contains(&frame) {
+                assert!(!contains_glyph(draw, fallback_uv));
+                assert!(contains_glyph(draw, loading_uv));
+            }
+        }
+        crate::fonts::FontFallback::default().reset();
     }
 
     #[test]

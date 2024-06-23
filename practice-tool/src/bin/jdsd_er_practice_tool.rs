@@ -30,16 +30,16 @@ fn perform_injection() -> Result<()> {
     let process = Process::by_name("eldenring.exe").map_err(|_| {
         anyhow!(dedent!(
             r#"
-            Could not find the ELDEN RING process.
+            找不到艾尔登法环进程。
 
-            If it is not running, start it.
+            请先确认已经启动游戏。
             
-            If you have and it's not working, make sure to follow these steps:
-            - Disable running antivirus software, uninstall any mods and stop overlay programs (RTSS/FRAPS).
-            - Start Steam (offline mode is fine).
-            - Double-click eldenring.exe
-              (Steam > ELDEN RING > Manage > Browse Local Files).
-            - Double-click jdsd_er_practice_tool.exe.
+            如果游戏已经启动但依然未正常工作，确认遵循以下步骤：
+            - 禁用杀毒软件并卸载所有mod，停用所有游戏内覆盖显示工具（RTSS/FRAPS等）
+            - 启动Steam (可以离线模式)
+            - 双击 eldenring.exe
+              (Steam > 艾尔登法环 > 管理 > 浏览本地文件)
+            - 双击 jdsd_er_practice_tool.exe
             "#
         )
         .trim())
@@ -47,10 +47,7 @@ fn perform_injection() -> Result<()> {
 
     let events = events();
     if is_running(&events) {
-        bail!(
-            "The practice tool is already running.\n\nTo start a different copy, restart the game \
-             first."
-        );
+        bail!("练习工具已在运行。\n\n如需启动另一份工具，请先重启游戏。");
     }
 
     debug!("Searching for tool DLL...");
@@ -59,8 +56,8 @@ fn perform_injection() -> Result<()> {
 
     if !dll_path.exists() {
         bail!(
-            "Could not find {}.\n\nExtract all the files from the zip archive before running the \
-             practice tool, and make sure your antivirus didn't delete it.",
+            "找不到 {}。\n\n请先解压压缩包中的所有文件，再运行练习工具，\
+             并确认杀毒软件没有删除该文件。",
             dll_path.display()
         );
     }
@@ -73,9 +70,8 @@ fn perform_injection() -> Result<()> {
     debug!("Injecting {:?}...", dll_path);
     process.inject(dll_path).map_err(|e| {
         anyhow!(
-            "Could not hook the practice tool: {e}.\n\nPlease make sure you have no antiviruses \
-             running, EAC is properly bypassed, no other overlay tools like FRAPS and RTSS are \
-             running, and you are running an unmodded and legitimate version of the game."
+            "无法注入练习工具: {e}.\n\n请确保你禁用了杀毒软件，绕过了EAC(小蓝熊)，\
+             并且运行了未打mod的原版游戏，且停用了所有游戏内覆盖显示工具（RTSS/FRAPS等）。"
         )
     })?;
 
@@ -83,7 +79,7 @@ fn perform_injection() -> Result<()> {
     // loaded this very file at startup, so injecting it did nothing: ask
     // that copy to start instead.
     if !is_running(&events) {
-        request_start(&events).map_err(|e| anyhow!("Could not start the practice tool: {e}."))?;
+        request_start(&events).map_err(|e| anyhow!("无法启动练习工具：{e}。"))?;
     }
 
     Ok(())
@@ -97,8 +93,8 @@ fn main() -> Result<()> {
         Update::Error(e) => error!("Could not check for updates: {e}"),
         Update::Available { url, notes } => {
             if let MESSAGEBOX_RESULT(1) = message_box(
-                "Elden Ring Practice Tool - Update available",
-                &format!("{notes}\n\nDo you want to download it?"),
+                "艾尔登法环练习工具 - 有可用更新",
+                &format!("{notes}\n\n是否下载更新？"),
                 MB_OKCANCEL | MB_ICONINFORMATION,
             ) {
                 return Ok(open::that(&url)?);
@@ -108,7 +104,7 @@ fn main() -> Result<()> {
     }
 
     if let Err(e) = perform_injection() {
-        message_box("Elden Ring Practice Tool - Error", &e.to_string(), MB_OK | MB_ICONERROR);
+        message_box("艾尔登法环练习工具 - 错误", &e.to_string(), MB_OK | MB_ICONERROR);
     }
 
     Ok(())

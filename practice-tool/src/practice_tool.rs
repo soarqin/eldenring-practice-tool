@@ -69,6 +69,7 @@ pub(crate) struct PracticeTool {
     log: Vec<(Instant, String)>,
     log_rx: Receiver<String>,
     log_tx: Sender<String>,
+    is_hidden: bool,
     ui_state: UiState,
     fonts: Option<FontIDs>,
     icons: Icons,
@@ -112,20 +113,15 @@ impl PracticeTool {
             let default = || Config::parse(DEFAULT_CONFIG).expect("Bundled config is valid");
 
             let Some(path) = config_path() else {
-                let msg =
-                    "Couldn't locate the configuration file. Using the default configuration.";
+                let msg = "无法定位配置文件，正在使用默认配置。";
                 return (default(), Some(msg.to_string()));
             };
 
             if !path.exists() {
                 let msg = match std::fs::write(&path, DEFAULT_CONFIG) {
-                    Ok(()) => format!(
-                        "Configuration file not found. A default one has been created at {}.",
-                        path.display()
-                    ),
+                    Ok(()) => format!("找不到配置文件，已在 {} 创建默认配置。", path.display()),
                     Err(e) => format!(
-                        "Configuration file not found, and a default one couldn't be created at \
-                         {}: {e}. Using the default configuration.",
+                        "找不到配置文件，且无法在 {} 创建默认配置：{e}。正在使用默认配置。",
                         path.display()
                     ),
                 };
@@ -133,15 +129,14 @@ impl PracticeTool {
             }
 
             match std::fs::read_to_string(&path)
-                .map_err(|e| format!("Couldn't read config file: {e}"))
+                .map_err(|e| format!("无法读取设置文件: {e}"))
                 .and_then(|content| Config::parse(&content))
             {
                 Ok(config) => (config, None),
                 Err(e) => (
                     default(),
                     Some(format!(
-                        "{e}\nFix the configuration file at {}, or delete it to have a default \
-                         one created, then restart the game.",
+                        "{e}\n请修正 {} 中的配置，或删除该文件以重新创建默认配置，然后重启游戏。",
                         path.display()
                     )),
                 ),
@@ -193,8 +188,8 @@ impl PracticeTool {
                     .init();
 
                 match e {
-                    None => error!("Could not construct log file path"),
-                    Some(Err(e)) => error!("Could not initialize log file: {:?}", e),
+                    None => error!("无法创建log文件目录"),
+                    Some(Err(e)) => error!("无法初始化log文件: {:?}", e),
                     _ => unreachable!(),
                 }
             },
@@ -246,7 +241,7 @@ impl PracticeTool {
 
         let version_label = {
             let (maj, min, patch) = version::get_version().into();
-            format!("Game Ver {maj}.{min:02}.{patch}")
+            format!("游戏版本 {maj}.{min:02}.{patch}")
         };
         let (log_tx, log_rx) = crossbeam_channel::unbounded();
 
@@ -258,6 +253,7 @@ impl PracticeTool {
             log: Vec::new(),
             log_rx,
             log_tx,
+            is_hidden: false,
             fonts: None,
             icons: Icons::default(),
             config_editor: ConfigEditor::new(config_path()),
@@ -288,7 +284,7 @@ impl PracticeTool {
             ),
         };
         tool.apply_config(config);
-        info!("Practice tool initialized");
+        info!("练习工具初始化完毕");
 
         tool
     }
@@ -327,20 +323,38 @@ impl PracticeTool {
                 }
                 self.profiler.mark(Phase::WidgetsRender);
 
-                if ui.button_with_size("Close", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
+                if ui.button_with_size("关闭", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
                 {
-                    self.ui_state = UiState::Closed;
+                    self.ui_state = if self.is_hidden { UiState::Hidden } else { UiState::Closed };
                     POINTERS.cursor_show.set(false);
                 }
 
-                if option_env!("CARGO_XTASK_DIST").is_none()
-                    && ui.button_with_size("Eject", [
+                if self.is_hidden {
+                    if ui.button_with_size("取消隐藏", [
                         BUTTON_WIDTH * scaling_factor(ui),
                         BUTTON_HEIGHT,
-                    ])
+                    ]) {
+                        self.is_hidden = false;
+                        self.ui_state = UiState::Closed;
+                        POINTERS.cursor_show.set(false);
+                    }
+                } else if ui
+                    .button_with_size("卸载", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
                 {
                     self.ui_state = UiState::Closed;
                     POINTERS.cursor_show.set(false);
+                    unsafe {
+                        let mut params = PARAMS.write();
+                        if let Err(e) = params.refresh() {
+                            error!("{}", e);
+                        }
+                        if let Some(mut goods) = params.get_equip_param_goods() {
+                            if let Some(whistle) = goods.find(|i| i.id == 130).and_then(|p| p.param)
+                            {
+                                whistle.icon_id = 13;
+                            }
+                        }
+                    }
                     hudhook::eject();
                 }
             });
@@ -365,17 +379,17 @@ impl PracticeTool {
                     | WindowFlags::ALWAYS_AUTO_RESIZE
             })
             .build(|| {
-                ui.text("johndisandonato's Practice Tool");
+                ui.text("johndisandonato的练习工具");
 
                 // ui.same_line();
 
-                if ui.small_button("Open") {
+                if ui.small_button("打开") {
                     self.ui_state = UiState::MenuOpen;
                 }
 
                 ui.same_line();
 
-                if ui.small_button("Indicators") {
+                if ui.small_button("指示器") {
                     ui.open_popup("##indicators_window");
                 }
 
@@ -389,23 +403,22 @@ impl PracticeTool {
                         POINTERS.cursor_show.set(true);
 
                         ui.text(
-                            "You can toggle indicators here, as\nwell as reset the frame \
-                             counter.\n\nKeep in mind that the available\nindicators and order of \
-                             them depend\non your config file.",
+                            "你可以在这里切换指示器开关，\n重置帧数计数值。\n\n注意，\
+                             指示器列表和顺序是由\n你的配置文件决定的。",
                         );
                         ui.separator();
 
                         for indicator in &mut self.settings.indicators {
                             let label = match indicator.indicator {
-                                IndicatorType::GameVersion => "Game Version",
-                                IndicatorType::Position => "Player Position",
-                                IndicatorType::PositionChange => "Player Velocity",
-                                IndicatorType::PositionDistance => "Player Distance",
-                                IndicatorType::Animation => "Animation",
-                                IndicatorType::Igt => "IGT Timer",
+                                IndicatorType::GameVersion => "游戏版本",
+                                IndicatorType::Position => "玩家位置",
+                                IndicatorType::PositionChange => "玩家速度",
+                                IndicatorType::PositionDistance => "玩家距离",
+                                IndicatorType::Animation => "动画",
+                                IndicatorType::Igt => "游戏内时间(IGT)",
                                 IndicatorType::Fps => "FPS",
-                                IndicatorType::FrameCount => "Frame Counter",
-                                IndicatorType::ImguiDebug => "ImGui Debug Info",
+                                IndicatorType::FrameCount => "帧数计数器",
+                                IndicatorType::ImguiDebug => "ImGui调试信息",
                             };
 
                             let mut state = indicator.enabled;
@@ -417,7 +430,7 @@ impl PracticeTool {
                             if let IndicatorType::FrameCount = indicator.indicator {
                                 ui.same_line();
 
-                                let btn_reset_label = "Reset";
+                                let btn_reset_label = "重置";
                                 let btn_reset_width = ui.calc_text_size(btn_reset_label)[0]
                                     + style.frame_padding[0] * 2.0;
 
@@ -426,7 +439,7 @@ impl PracticeTool {
                                     ui.cursor_pos()[1],
                                 ]);
 
-                                if ui.button("Reset") {
+                                if ui.button("重置") {
                                     self.framecount = 0;
                                 }
                             }
@@ -434,7 +447,7 @@ impl PracticeTool {
                             if let IndicatorType::PositionDistance = indicator.indicator {
                                 ui.same_line();
 
-                                let btn_xyz_label = "Start XYZ";
+                                let btn_xyz_label = "起始坐标";
                                 let btn_xyz_width = ui.calc_text_size(btn_xyz_label)[0]
                                     + style.frame_padding[0] * 2.0;
 
@@ -443,7 +456,7 @@ impl PracticeTool {
                                     ui.cursor_pos()[1],
                                 ]);
 
-                                if ui.button("Start XYZ") {
+                                if ui.button(btn_xyz_label) {
                                     if let Some([x, y, z, _a1, _a2]) =
                                         POINTERS.global_position.read()
                                     {
@@ -458,11 +471,19 @@ impl PracticeTool {
                         let btn_close_width =
                             ui.content_region_max()[0] - style.frame_padding[0] * 2.0;
 
-                        if ui.button_with_size("Close", [btn_close_width, 0.0]) {
+                        if ui.button_with_size("关闭", [btn_close_width, 0.0]) {
                             ui.close_current_popup();
                             POINTERS.cursor_show.set(false);
                         }
                     });
+
+                ui.same_line();
+
+                if ui.small_button("隐藏") {
+                    self.is_hidden = true;
+                    self.ui_state = UiState::Hidden;
+                    POINTERS.cursor_show.set(false);
+                }
 
                 ui.same_line();
 
@@ -486,7 +507,7 @@ impl PracticeTool {
                 if let Some(color) = update_color {
                     ui.same_line();
                     let _token = ui.push_style_color(StyleColor::Button, color);
-                    if ui.small_button("Update") {
+                    if ui.small_button("更新") {
                         ui.open_popup("##update");
                     }
                 }
@@ -497,12 +518,7 @@ impl PracticeTool {
                     .title_bar(false)
                     .build(|| {
                         POINTERS.cursor_show.set(true);
-                        ui.text(formatcp!(
-                            "Elden Ring Practice Tool v{}.{}.{}",
-                            MAJOR,
-                            MINOR,
-                            PATCH
-                        ));
+                        ui.text(formatcp!("艾尔登法环练习工具 v{}.{}.{}", MAJOR, MINOR, PATCH));
                         ui.separator();
                         ui.text(&self.help_text);
                         ui.separator();
@@ -512,18 +528,18 @@ impl PracticeTool {
                             open::that("https://twitch.tv/johndisandonato").ok();
                         }
                         ui.separator();
-                        if ui.button("Submit issue") {
+                        if ui.button("提交问题") {
                             open::that(
                                 "https://github.com/veeenu/eldenring-practice-tool/issues/new",
                             )
                             .ok();
                         }
                         ui.same_line();
-                        if ui.button("Support") {
+                        if ui.button("赞助") {
                             open::that("https://patreon.com/johndisandonato").ok();
                         }
                         ui.same_line();
-                        if ui.button("Close") {
+                        if ui.button("关闭") {
                             ui.close_current_popup();
                             POINTERS.cursor_show.set(false);
                         }
@@ -539,20 +555,20 @@ impl PracticeTool {
                         match UPDATE.get() {
                             Some(Update::Available { url, notes }) => {
                                 ui.text(notes);
-                                if ui.button("Download") {
+                                if ui.button("下载") {
                                     open::that(url).ok();
                                 }
                                 ui.same_line();
                             },
                             Some(Update::Error(e)) => {
-                                ui.text("Could not check for updates.");
+                                ui.text("无法检查更新。");
                                 ui.separator();
                                 ui.text(e);
                             },
                             Some(Update::UpToDate) | None => ui.close_current_popup(),
                         }
 
-                        if ui.button("Close") {
+                        if ui.button("关闭") {
                             ui.close_current_popup();
                             POINTERS.cursor_show.set(false);
                         }
@@ -623,7 +639,7 @@ impl PracticeTool {
                                 self.position_change_buf.clear();
                                 write!(
                                     self.position_change_buf,
-                                    "Velocity: [XYZ] {position_change_xyz:.3} | [XZ] \
+                                    "速度：[XYZ] {position_change_xyz:.3} | [XZ] \
                                      {position_change_xz:.3} | [Y] {position_change_y:.3}"
                                 )
                                 .ok();
@@ -648,7 +664,7 @@ impl PracticeTool {
                                 self.position_dist_buf.clear();
                                 write!(
                                     self.position_dist_buf,
-                                    "Distance: [XYZ] {position_dist_xyz:.4} | [XZ] \
+                                    "距离：[XYZ] {position_dist_xyz:.4} | [XZ] \
                                      {position_dist_xz:.4} | [Y] {position_dist_y:.4}"
                                 )
                                 .ok();
@@ -664,7 +680,7 @@ impl PracticeTool {
                                 self.cur_anim_buf.clear();
                                 write!(
                                     self.cur_anim_buf,
-                                    "Animation {cur_anim} ({cur_anim_time}s /  {cur_anim_length}s)",
+                                    "动画 {cur_anim} ({cur_anim_time}s / {cur_anim_length}s)",
                                 )
                                 .ok();
                                 ui.text(&self.cur_anim_buf);
@@ -695,7 +711,7 @@ impl PracticeTool {
                         },
                         IndicatorType::FrameCount => {
                             self.framecount_buf.clear();
-                            write!(self.framecount_buf, "Frame count {0}", self.framecount,).ok();
+                            write!(self.framecount_buf, "帧数 {0}", self.framecount,).ok();
                             ui.text(&self.framecount_buf);
                         },
                         IndicatorType::ImguiDebug => {
@@ -826,7 +842,11 @@ impl PracticeTool {
                         ui.text(&l.1);
                     } else {
                         l.0 = Instant::now();
-                        ui.text("Loading...");
+                        ui.text(if crate::fonts::text_ready(ui, "加载中...") {
+                            "加载中..."
+                        } else {
+                            "Loading..."
+                        });
                     }
                 }
                 ui.set_scroll_here_y();
@@ -880,9 +900,15 @@ impl ImguiRenderLoop for PracticeTool {
 
         if !ui.io().want_capture_keyboard && (display || hide) {
             self.ui_state = match (&self.ui_state, hide) {
-                (UiState::Hidden, _) => UiState::Closed,
+                (UiState::Hidden, _) => UiState::MenuOpen,
                 (_, true) => UiState::Hidden,
-                (UiState::MenuOpen, _) => UiState::Closed,
+                (UiState::MenuOpen, _) => {
+                    if self.is_hidden {
+                        UiState::Hidden
+                    } else {
+                        UiState::Closed
+                    }
+                },
                 (UiState::Closed, _) => UiState::MenuOpen,
             };
 
@@ -897,6 +923,12 @@ impl ImguiRenderLoop for PracticeTool {
         self.render_radial(ui);
 
         let ui_state = self.ui_state.name();
+        if !matches!(self.ui_state, UiState::Hidden) {
+            crate::fonts::request_text(
+                ui,
+                include_str!(concat!(env!("OUT_DIR"), "/ui-glyphs.txt")),
+            );
+        }
         self.profiler.mark(Phase::Radial);
 
         match &self.ui_state {
@@ -958,11 +990,16 @@ impl ImguiRenderLoop for PracticeTool {
 
 fn help_text(settings: &Settings) -> String {
     format!(
-        "Press the {} key to open/close the tool's\ninterface.\n\nYou can toggle flags/launch \
-         commands by\nclicking in the UI or by pressing\nthe hotkeys (in the parentheses).\n\nYou \
-         can configure your tool with the\ncogwheel button next to the help one,\nor by editing \
-         the\njdsd_er_practice_tool.toml file with\na text editor. If you break something,\njust \
-         download a fresh file!\n\nThank you for using my tool! <3\n",
+        concat!(
+            "按 {} 键打开或关闭工具界面。\n\n",
+            "点击界面按钮，或按括号内的快捷键，\n",
+            "可以切换功能或运行指令。\n\n",
+            "点击帮助按钮旁的齿轮按钮修改配置，\n",
+            "也可以用文本编辑器修改\n",
+            "jdsd_er_practice_tool.toml 文件。\n",
+            "如果配置文件损坏，可以下载原始文件覆盖。\n\n",
+            "感谢使用我的工具！<3\n",
+        ),
         settings.display
     )
 }
@@ -971,15 +1008,15 @@ fn help_text(settings: &Settings) -> String {
 fn imgui_debug(ui: &Ui, buf: &mut String) {
     let io = ui.io();
     buf.clear();
-    writeln!(buf, "Mouse position     {:?}", io.mouse_pos).ok();
-    writeln!(buf, "Mouse down         {:?}", io.mouse_down).ok();
-    writeln!(buf, "Want capture mouse {:?}", io.want_capture_mouse).ok();
-    writeln!(buf, "Want capture kbd   {:?}", io.want_capture_keyboard).ok();
-    writeln!(buf, "Want text input    {:?}", io.want_text_input).ok();
-    writeln!(buf, "Want set mouse pos {:?}", io.want_set_mouse_pos).ok();
-    writeln!(buf, "Any item active    {:?}", ui.is_any_item_active()).ok();
-    writeln!(buf, "Any item hovered   {:?}", ui.is_any_item_hovered()).ok();
-    writeln!(buf, "Any item focused   {:?}", ui.is_any_item_focused()).ok();
-    write!(buf, "Any mouse down     {:?}", ui.is_any_mouse_down()).ok();
+    writeln!(buf, "鼠标位置         {:?}", io.mouse_pos).ok();
+    writeln!(buf, "鼠标按键         {:?}", io.mouse_down).ok();
+    writeln!(buf, "请求捕获鼠标     {:?}", io.want_capture_mouse).ok();
+    writeln!(buf, "请求捕获键盘     {:?}", io.want_capture_keyboard).ok();
+    writeln!(buf, "请求文本输入     {:?}", io.want_text_input).ok();
+    writeln!(buf, "请求设置鼠标位置 {:?}", io.want_set_mouse_pos).ok();
+    writeln!(buf, "有活动控件       {:?}", ui.is_any_item_active()).ok();
+    writeln!(buf, "有悬停控件       {:?}", ui.is_any_item_hovered()).ok();
+    writeln!(buf, "有焦点控件       {:?}", ui.is_any_item_focused()).ok();
+    write!(buf, "有鼠标按键按下   {:?}", ui.is_any_mouse_down()).ok();
     ui.text(&*buf);
 }

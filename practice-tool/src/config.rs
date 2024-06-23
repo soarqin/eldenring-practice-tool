@@ -105,7 +105,7 @@ impl TryFrom<IndicatorConfig> for Indicator {
             .iter()
             .find(|(id, ..)| *id == indicator.indicator)
             .map(|&(_, kind, _)| Indicator { indicator: kind, enabled: indicator.enabled })
-            .ok_or_else(|| format!("Unrecognized indicator: {}", indicator.indicator))
+            .ok_or_else(|| format!("无法识别的指示器: {}", indicator.indicator))
     }
 }
 
@@ -219,7 +219,7 @@ impl CfgCommand {
                 deathcam(&chains.deathcam.0, &chains.deathcam.1, &chains.deathcam.2, hotkey)
             },
             CfgCommand::SpecialFlag { flag, hotkey: _ } => {
-                error!("Invalid flag {}", flag);
+                error!("无效的 flag: {}", flag);
                 return None;
             },
             CfgCommand::Label { label } => label_widget(label.as_str()),
@@ -331,44 +331,44 @@ impl FlagSpec {
 /// Valid flag specifiers, their labels, and the pointer chains they toggle.
 #[rustfmt::skip]
 pub(crate) const FLAGS: &[(&str, &str, FlagGetter)] = &[
-    ("one_shot", "One shot", |c| &c.one_shot),
-    ("no_damage", "All no damage", |c| &c.no_damage),
-    ("no_dead", "No death", |c| &c.no_dead),
-    ("no_hit", "No hit", |c| &c.no_hit),
-    ("no_goods_consume", "Inf Consumables", |c| &c.no_goods_consume),
-    ("no_stamina_consume", "Inf Stamina", |c| &c.no_stamina_consume),
-    ("no_fp_consume", "Inf Focus", |c| &c.no_fp_consume),
-    ("no_ashes_of_war_fp_consume", "Inf Focus (AoW)", |c| &c.no_ashes_of_war_fp_consume),
-    ("no_arrows_consume", "Inf arrows", |c| &c.no_arrows_consume),
-    ("no_attack", "No attack", |c| &c.no_attack),
-    ("no_move", "No move", |c| &c.no_move),
-    ("no_update_ai", "No update AI", |c| &c.no_update_ai),
-    ("no_trigger_event", "No trigger events", |c| &c.no_trigger_event),
-    ("runearc", "Rune Arc", |c| &c.runearc),
-    ("gravity", "No Gravity", |c| &c.gravity),
-    ("torrent_gravity", "No Gravity (Torrent)", |c| &c.torrent_gravity),
-    ("collision", "No Collision", |c| &c.collision),
-    ("torrent_collision", "No Collision (Torrent)", |c| &c.torrent_collision),
-    ("action_freeze", "Action freeze", |c| &c.action_freeze),
-    ("display_stable_pos", "Show stable pos", |c| &c.display_stable_pos),
-    ("weapon_hitbox1", "Weapon hitbox #1", |c| &c.weapon_hitbox1),
-    ("weapon_hitbox2", "Weapon hitbox #2", |c| &c.weapon_hitbox2),
-    ("weapon_hitbox3", "Weapon hitbox #3", |c| &c.weapon_hitbox3),
-    ("hitbox_high", "High world hitbox", |c| &c.hitbox_high),
-    ("hitbox_low", "Low world hitbox", |c| &c.hitbox_low),
-    ("hitbox_f", "Walls hitbox", |c| &c.hitbox_f),
-    ("hitbox_character", "Character hitbox", |c| &c.hitbox_character),
-    ("hitbox_event", "Event hitbox", |c| &c.hitbox_event),
-    ("poise_view", "Poise View", |c| &c.poise_view),
-    ("sound_view", "Sound View", |c| &c.sound_view),
-    ("all_targeting_view", "Targeting View", |c| &c.all_targeting_view),
-    ("field_area_direction", "Direction HUD", |c| &c.field_area_direction),
-    ("field_area_altimeter", "Altimeter HUD", |c| &c.field_area_altimeter),
-    ("field_area_compass", "Compass HUD", |c| &c.field_area_compass),
-    // ("show_map", "Show/hide map", |c| &c.show_map),
-    ("show_chr", "Show/hide character", |c| &c.show_chr),
-    ("show_all_map_layers", "Show all map layers", |c| &c.show_all_map_layers),
-    ("show_all_graces", "Show all graces", |c| &c.show_all_graces),
+    ("one_shot", "一击必杀", |c| &c.one_shot),
+    ("no_damage", "全体无伤害", |c| &c.no_damage),
+    ("no_dead", "不会死亡", |c| &c.no_dead),
+    ("no_hit", "不会受击", |c| &c.no_hit),
+    ("no_goods_consume", "物品使用无消耗", |c| &c.no_goods_consume),
+    ("no_stamina_consume", "精力无消耗", |c| &c.no_stamina_consume),
+    ("no_fp_consume", "专注值无消耗", |c| &c.no_fp_consume),
+    ("no_ashes_of_war_fp_consume", "专注值无消耗 (战灰)", |c| &c.no_ashes_of_war_fp_consume),
+    ("no_arrows_consume", "箭矢无消耗", |c| &c.no_arrows_consume),
+    ("no_attack", "不攻击", |c| &c.no_attack),
+    ("no_move", "不移动", |c| &c.no_move),
+    ("no_update_ai", "不计算AI", |c| &c.no_update_ai),
+    ("no_trigger_event", "不触发事件", |c| &c.no_trigger_event),
+    ("runearc", "卢恩弯弧", |c| &c.runearc),
+    ("gravity", "无重力", |c| &c.gravity),
+    ("torrent_gravity", "无重力 (托雷特)", |c| &c.torrent_gravity),
+    ("collision", "无碰撞", |c| &c.collision),
+    ("torrent_collision", "无碰撞 (托雷特)", |c| &c.torrent_collision),
+    ("action_freeze", "锁定行动", |c| &c.action_freeze),
+    ("display_stable_pos", "显示稳定站立位置", |c| &c.display_stable_pos),
+    ("weapon_hitbox1", "武器碰撞检测框 #1", |c| &c.weapon_hitbox1),
+    ("weapon_hitbox2", "武器碰撞检测框 #2", |c| &c.weapon_hitbox2),
+    ("weapon_hitbox3", "武器碰撞检测框 #3", |c| &c.weapon_hitbox3),
+    ("hitbox_high", "世界碰撞检测框 (高)", |c| &c.hitbox_high),
+    ("hitbox_low", "世界碰撞检测框 (低)", |c| &c.hitbox_low),
+    ("hitbox_f", "墙碰撞检测框", |c| &c.hitbox_f),
+    ("hitbox_character", "角色碰撞检测框", |c| &c.hitbox_character),
+    ("hitbox_event", "事件碰撞检测框", |c| &c.hitbox_event),
+    ("poise_view", "韧性条显示", |c| &c.poise_view),
+    ("sound_view", "声音范围显示", |c| &c.sound_view),
+    ("all_targeting_view", "视野范围显示(掉帧警告)", |c| &c.all_targeting_view),
+    ("field_area_direction", "方向HUD", |c| &c.field_area_direction),
+    ("field_area_altimeter", "高度HUD", |c| &c.field_area_altimeter),
+    ("field_area_compass", "罗盘HUD", |c| &c.field_area_compass),
+    // ("show_map", "显示/隐藏地图", |c| &c.show_map),
+    ("show_chr", "显示/隐藏角色", |c| &c.show_chr),
+    ("show_all_map_layers", "显示所有地图层", |c| &c.show_all_map_layers),
+    ("show_all_graces", "显示所有赐福", |c| &c.show_all_graces),
 ];
 
 impl TryFrom<String> for FlagSpec {
@@ -379,7 +379,7 @@ impl TryFrom<String> for FlagSpec {
             .iter()
             .find(|(id, ..)| *id == value)
             .map(|&(_, label, getter)| FlagSpec::new(label, getter))
-            .ok_or_else(|| format!("\"{value}\" is not a valid flag specifier"))
+            .ok_or_else(|| format!("\"{value}\" 不是有效的 flag 指示"))
     }
 }
 
@@ -410,7 +410,7 @@ impl TryFrom<String> for MultiFlagSpec {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
-            "show_map" => Ok(MultiFlagSpec::new("Show/hide map", vec![
+            "show_map" => Ok(MultiFlagSpec::new("显示/隐藏地图", vec![
                 |c| &c.show_geom[0],
                 |c| &c.show_geom[1],
                 |c| &c.show_geom[2],
@@ -428,7 +428,7 @@ impl TryFrom<String> for MultiFlagSpec {
                 |c| &c.show_geom[if c.show_geom.len() <= 13 { 12 } else { 14 }], // AS
                 |c| &c.show_geom[if c.show_geom.len() <= 13 { 12 } else { 15 }], // SIN
             ])),
-            e => Err(format!("\"{e}\" is not a valid multiflag specifier")),
+            e => Err(format!("\"{e}\" 不是有效的多 flag 指示")),
         }
     }
 }
@@ -437,7 +437,7 @@ impl ConfigSchema for Config {
     type Config = Config;
 
     const SETTINGS: Kind = Kind {
-        name: "Settings",
+        name: "设置",
         fields: &[
             ("log_level", Field::Choice(&["DEBUG", "TRACE", "INFO", "WARN", "ERROR", "OFF"])),
             ("display", Field::Key),
@@ -451,22 +451,22 @@ impl ConfigSchema for Config {
     };
     #[rustfmt::skip]
     const WIDGETS: &'static [Kind] = &[
-        Kind { name: "Flag", fields: &[("flag", Field::Flag), ("hotkey", Field::OptKey)] },
-        Kind { name: "Multi flag", fields: &[("flags", Field::Flags), ("label", Field::Text("Multi flag")), ("hotkey", Field::OptKey)] },
-        Kind { name: "Label", fields: &[("label", Field::Text(""))] },
-        Kind { name: "Group", fields: &[("group", Field::Text("Group")), ("commands", Field::Widgets)] },
-        Kind { name: "Savefile manager", fields: &[("savefile_manager", Field::KeyOrTrue)] },
-        Kind { name: "Item spawner", fields: &[("item_spawner", Field::KeyOrTrue)] },
-        Kind { name: "Character stats", fields: &[("character_stats", Field::KeyOrTrue)] },
-        Kind { name: "Position", fields: &[("position", Field::KeyOrTrue), ("save", Field::OptKey)] },
-        Kind { name: "Nudge position", fields: &[("nudge", Field::Float(1.)), ("nudge_up", Field::OptKey), ("nudge_down", Field::OptKey)] },
-        Kind { name: "Cycle speed", fields: &[("cycle_speed", Field::Floats(&[0.5, 1., 2.])), ("hotkey", Field::OptKey)] },
-        Kind { name: "Cycle color", fields: &[("cycle_color", Field::Ints(&[0, 1, 2, 3])), ("hotkey", Field::OptKey)] },
-        Kind { name: "Runes", fields: &[("runes", Field::Int(10000)), ("hotkey", Field::OptKey)] },
-        Kind { name: "Quitout", fields: &[("quitout", Field::KeyOrTrue)] },
-        Kind { name: "Target", fields: &[("target", Field::KeyOrTrue)] },
-        Kind { name: "Warp", fields: &[("warp", Field::Bool(true))] },
-        Kind { name: "Input viewer", fields: &[("input_viewer", Field::KeyOrTrue), ("seconds", Field::Int(5))] },
+        Kind { name: "开关", fields: &[("flag", Field::Flag), ("hotkey", Field::OptKey)] },
+        Kind { name: "组合开关", fields: &[("flags", Field::Flags), ("label", Field::Text("组合开关")), ("hotkey", Field::OptKey)] },
+        Kind { name: "标签", fields: &[("label", Field::Text(""))] },
+        Kind { name: "分组", fields: &[("group", Field::Text("分组")), ("commands", Field::Widgets)] },
+        Kind { name: "存档管理", fields: &[("savefile_manager", Field::KeyOrTrue)] },
+        Kind { name: "生成物品", fields: &[("item_spawner", Field::KeyOrTrue)] },
+        Kind { name: "角色属性", fields: &[("character_stats", Field::KeyOrTrue)] },
+        Kind { name: "保存位置", fields: &[("position", Field::KeyOrTrue), ("save", Field::OptKey)] },
+        Kind { name: "位置调整", fields: &[("nudge", Field::Float(1.)), ("nudge_up", Field::OptKey), ("nudge_down", Field::OptKey)] },
+        Kind { name: "速度", fields: &[("cycle_speed", Field::Floats(&[0.5, 1., 2.])), ("hotkey", Field::OptKey)] },
+        Kind { name: "模型颜色", fields: &[("cycle_color", Field::Ints(&[0, 1, 2, 3])), ("hotkey", Field::OptKey)] },
+        Kind { name: "卢恩", fields: &[("runes", Field::Int(10000)), ("hotkey", Field::OptKey)] },
+        Kind { name: "快速退出", fields: &[("quitout", Field::KeyOrTrue)] },
+        Kind { name: "目标单位信息", fields: &[("target", Field::KeyOrTrue)] },
+        Kind { name: "传送", fields: &[("warp", Field::Bool(true))] },
+        Kind { name: "输入显示", fields: &[("input_viewer", Field::KeyOrTrue), ("seconds", Field::Int(5))] },
     ];
 
     /// Also lists the specifiers that other commands accept under the `flag`
@@ -475,7 +475,7 @@ impl ConfigSchema for Config {
         FLAGS
             .iter()
             .map(|&(id, label, _)| (id, label))
-            .chain([("show_map", "Show/hide map"), ("deathcam", "Deathcam")])
+            .chain([("show_map", "显示/隐藏地图"), ("deathcam", "死亡视角")])
     }
 
     fn indicators() -> impl Iterator<Item = (&'static str, bool)> {

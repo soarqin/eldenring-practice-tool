@@ -64,8 +64,7 @@ pub(super) fn read(params: &ParamTables, messages: &Messages) -> Option<Vec<Grac
         }
         // The spawn point can reference a missing FMG entry. Keep it usable,
         // while preferring its game-provided name whenever one is available.
-        let Some(name) =
-            name.or_else(|| (id == 0).then(|| "Chapel of Anticipation (New Game)".into()))
+        let Some(name) = name.or_else(|| (id == 0).then(|| "侯王礼拜堂 (新游戏)".into()))
         else {
             continue;
         };

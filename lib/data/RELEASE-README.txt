@@ -1,42 +1,41 @@
-Welcome to the Elden Ring Practice Tool!
+欢迎使用艾尔登法环练习工具！
 
 ----------------------------------------------------------------------------------------------------
-# How to run the tool
+# 如何运行工具
 
-Always double-click `eldenring.exe` to start the game (Steam → right click **ELDEN RING** →
-Manage → Browse Local Files). Never start the game from Steam: if you do, the tool won't work.
+请双击 `eldenring.exe` 启动游戏（Steam → 右键点击「艾尔登法环」→ 管理 → 浏览本地文件）。
+不要从 Steam 启动游戏，否则工具无法运行。
 
-You can run the practice tool in two ways.
+有两种运行方式。
 
-By double-clicking `jdsd_er_practice_tool.exe`:
-  - Extract all files from the zip archive. Anywhere will do.
-  - Double-click `jdsd_er_practice_tool.exe` while the game is running.
+直接运行 `jdsd_er_practice_tool.exe`：
+  - 将压缩包中的所有文件解压到任意文件夹。
+  - 在游戏运行时，双击 `jdsd_er_practice_tool.exe`。
 
-By installing it:
-  - Copy all the files to your ELDEN RING game folder, the one that contains `eldenring.exe`.
-    Repeat this for every patch of the game you play on.
-  - Start ELDEN RING by double-clicking `eldenring.exe`.
-  - While it is starting, press and hold right shift for a few seconds, until the tool appears.
-    If you miss it, double-click `jdsd_er_practice_tool.exe` in the game folder.
-  - To update, copy the new files over the old ones. To uninstall, delete `dinput8.dll`.
+安装到游戏目录：
+  - 将所有文件复制到包含 `eldenring.exe` 的游戏目录。
+    如果使用多个游戏版本，请分别复制到对应目录。
+  - 双击 `eldenring.exe` 启动游戏。
+  - 启动时按住右 Shift 键几秒，直到工具出现。
+    如果错过启动时机，请双击游戏目录中的 `jdsd_er_practice_tool.exe`。
+  - 更新时用新文件覆盖旧文件；卸载时删除 `dinput8.dll`。
 
-The tool always loads the `dinput8.dll` next to the `jdsd_er_practice_tool.exe` you
-double-click: to try a new version, start the game without holding right shift, then run the
-new version's exe.
+工具始终加载所运行的 `jdsd_er_practice_tool.exe` 同目录下的 `dinput8.dll`。
+试用新版本时，请先在不按右 Shift 键的情况下启动游戏，再运行新版本的 exe。
 
-The first time you run the tool, if you haven't disabled EAC already, the tool will offer to do it
-for you. You will then have to restart the game, and then the tool, and you'll be good to go!
+首次运行时，如果尚未绕过 EAC（小蓝熊），工具会提示并帮助绕过。
+之后请依次重启游戏和工具。
 
-On Linux, set the game's launch options in Steam to `WINEDLLOVERRIDES="dinput8=n,b" %command%`.
+在 Linux 上，请将 Steam 中的游戏启动选项设为 `WINEDLLOVERRIDES="dinput8=n,b" %command%`。
 ----------------------------------------------------------------------------------------------------
 
-If you have issues or questions, thoroughly check the FAQ.
-If you can't find what you need there, feel free to open an issue or join the discord.
+如果遇到问题，请先仔细查看 FAQ。
+如果仍未找到答案，欢迎提交 Issue 或加入 Discord 反馈。
 
-You can find the FAQ here:
+FAQ：
 https://github.com/veeenu/eldenring-practice-tool#readme
 
-If you enjoy the tool, please consider supporting me:
+如果喜欢这个工具，请考虑赞助：
 https://patreon.com/johndisandonato
 
 -- johndisandonato

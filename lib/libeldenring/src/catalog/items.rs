@@ -45,21 +45,21 @@ impl ItemCategory {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Weapons => "Weapons",
-            Self::Ammunition => "Ammunition",
-            Self::Head => "Armor: Head",
-            Self::Chest => "Armor: Chest",
-            Self::Arms => "Armor: Arms",
-            Self::Legs => "Armor: Legs",
-            Self::Talismans => "Talismans",
-            Self::Sorceries => "Sorceries",
-            Self::Incantations => "Incantations",
-            Self::AshesOfWar => "Ashes of War",
-            Self::SpiritAshes => "Spirit Ashes",
-            Self::Consumables => "Consumables",
-            Self::Materials => "Materials",
-            Self::Miscellaneous => "Miscellaneous / Key Items",
-            Self::Unused => "Unused / Cut Content",
+            Self::Weapons => "武器",
+            Self::Ammunition => "箭矢/弩箭",
+            Self::Head => "防具: 头部",
+            Self::Chest => "防具: 身体",
+            Self::Arms => "防具: 手部",
+            Self::Legs => "防具: 腿部",
+            Self::Talismans => "护符",
+            Self::Sorceries => "魔法",
+            Self::Incantations => "祷告",
+            Self::AshesOfWar => "战灰",
+            Self::SpiritAshes => "骨灰",
+            Self::Consumables => "消耗品",
+            Self::Materials => "材料",
+            Self::Miscellaneous => "杂项/关键物品",
+            Self::Unused => "未使用/删减内容",
         }
     }
 }
@@ -180,7 +180,7 @@ fn weapon_types(
             id,
             name: name(text)
                 .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| format!("Weapon type {kind}")),
+                .unwrap_or_else(|| format!("武器类型 {kind}")),
         });
         types.entry(kind).or_insert_with(|| group.clone());
     }
@@ -261,7 +261,7 @@ pub(super) fn read(params: &ParamTables, messages: &Messages) -> Option<Vec<Item
                 // Keep weapons with unknown/modded types visible. PARAM row
                 // IDs in the type table precede the next format group.
                 id: 0x1_0000 + u32::from(kind),
-                name: format!("Weapon type {kind}"),
+                name: format!("武器类型 {kind}"),
             })),
             variants,
             max_quantity: 99,

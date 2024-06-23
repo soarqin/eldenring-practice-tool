@@ -302,7 +302,7 @@ dependencies = [
  "anyhow",
  "const_format",
  "embed-resource",
- "hudhook",
+ "hudhook 0.9.3 (git+https://github.com/soarqin/hudhook?branch=fix%2Fall-in-one)",
  "imgui",
  "libeldenring",
  "log-panics",
@@ -407,6 +407,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
+name = "gl_generator"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a95dfc23a2b4a9a2f5ab41d194f8bfda3cabec42af4e39f08c339eb2a0c124d"
+dependencies = [
+ "khronos_api",
+ "log",
+ "xml-rs",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -435,6 +446,23 @@ checksum = "6d7f3def5b8fafd0bd3acf6a63fdbe5c637963ce1d207192ef3c47bd4f28b394"
 dependencies = [
  "bitflags 2.13.2",
  "cc",
+ "imgui",
+ "once_cell",
+ "parking_lot",
+ "tracing",
+ "tracing-subscriber",
+ "windows",
+ "windows-numerics",
+]
+
+[[package]]
+name = "hudhook"
+version = "0.9.3"
+source = "git+https://github.com/soarqin/hudhook?branch=fix%2Fall-in-one#c1f7f4ad5862ee1522d187d2c5fde9dad7d0cb1c"
+dependencies = [
+ "bitflags 2.13.2",
+ "cc",
+ "gl_generator",
  "imgui",
  "once_cell",
  "parking_lot",
@@ -654,6 +682,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "khronos_api"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
+
+[[package]]
 name = "konst"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,7 +765,7 @@ dependencies = [
 [[package]]
 name = "macro-param"
 version = "0.1.0"
-source = "git+https://github.com/veeenu/practice-tool-core#f0486605d3a240e5bc996a91c3073bbd225dbbc0"
+source = "git+https://github.com/soarqin/practice-tool-core?branch=i18n_zh-CN#c772dd46d183a3847ade0f18d7a398e09e938df5"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -868,7 +902,7 @@ dependencies = [
 name = "param-tinkerer"
 version = "0.1.0"
 dependencies = [
- "hudhook",
+ "hudhook 0.9.3 (git+https://github.com/soarqin/hudhook?branch=fix%2Fall-in-one)",
  "imgui",
  "imgui-sys",
  "libeldenring",
@@ -1004,7 +1038,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 [[package]]
 name = "practice-tool-core"
 version = "0.1.0"
-source = "git+https://github.com/veeenu/practice-tool-core#f0486605d3a240e5bc996a91c3073bbd225dbbc0"
+source = "git+https://github.com/soarqin/practice-tool-core?branch=i18n_zh-CN#c772dd46d183a3847ade0f18d7a398e09e938df5"
 dependencies = [
  "crossbeam-channel",
  "imgui",
@@ -1023,9 +1057,9 @@ dependencies = [
 [[package]]
 name = "practice-tool-core-windows"
 version = "0.1.0"
-source = "git+https://github.com/veeenu/practice-tool-core#f0486605d3a240e5bc996a91c3073bbd225dbbc0"
+source = "git+https://github.com/soarqin/practice-tool-core?branch=i18n_zh-CN#c772dd46d183a3847ade0f18d7a398e09e938df5"
 dependencies = [
- "hudhook",
+ "hudhook 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "practice-tool-core",
  "windows",
 ]
@@ -1033,7 +1067,7 @@ dependencies = [
 [[package]]
 name = "practice-tool-memedit"
 version = "0.1.0"
-source = "git+https://github.com/veeenu/practice-tool-core#f0486605d3a240e5bc996a91c3073bbd225dbbc0"
+source = "git+https://github.com/soarqin/practice-tool-core?branch=i18n_zh-CN#c772dd46d183a3847ade0f18d7a398e09e938df5"
 dependencies = [
  "cc",
  "practice-tool-core",
@@ -1043,7 +1077,7 @@ dependencies = [
 [[package]]
 name = "practice-tool-tasks"
 version = "0.1.0"
-source = "git+https://github.com/veeenu/practice-tool-core#f0486605d3a240e5bc996a91c3073bbd225dbbc0"
+source = "git+https://github.com/soarqin/practice-tool-core?branch=i18n_zh-CN#c772dd46d183a3847ade0f18d7a398e09e938df5"
 dependencies = [
  "anyhow",
  "dotenv",
@@ -1239,7 +1273,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "scripts"
 version = "1.10.0"
 dependencies = [
- "hudhook",
+ "hudhook 0.9.3 (git+https://github.com/soarqin/hudhook?branch=fix%2Fall-in-one)",
 ]
 
 [[package]]
@@ -2148,6 +2182,12 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "xml-rs"
+version = "0.8.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"

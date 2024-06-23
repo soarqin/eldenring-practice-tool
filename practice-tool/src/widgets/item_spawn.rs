@@ -14,19 +14,19 @@ use super::string_match;
 use crate::fonts::request_text;
 
 static AFFINITIES: [(u32, &str); 13] = [
-    (0, "No affinity"),
-    (100, "Heavy"),
-    (200, "Keen"),
-    (300, "Quality"),
-    (400, "Fire"),
-    (500, "Flame Art"),
-    (600, "Lightning"),
-    (700, "Sacred"),
-    (800, "Magic"),
-    (900, "Cold"),
-    (1000, "Poison"),
-    (1100, "Blood"),
-    (1200, "Occult"),
+    (0, "无质变"),
+    (100, "厚重"),
+    (200, "锋利"),
+    (300, "优质"),
+    (400, "火焰"),
+    (500, "焰术"),
+    (600, "雷电"),
+    (700, "神圣"),
+    (800, "魔力"),
+    (900, "寒冷"),
+    (1000, "毒"),
+    (1100, "血"),
+    (1200, "神秘"),
 ];
 
 const ISP_TAG: &str = "##item-spawn";
@@ -71,9 +71,9 @@ impl ItemSpawner {
             hotkey_close,
             sentinel,
             label_load: hotkey_load
-                .map(|k| format!("Spawn item ({k})"))
-                .unwrap_or_else(|| "Spawn item".into()),
-            label_close: format!("Close ({hotkey_close})"),
+                .map(|k| format!("生成物品 ({k})"))
+                .unwrap_or_else(|| "生成物品".into()),
+            label_close: format!("关闭 ({hotkey_close})"),
             qty: 1,
             current: None,
             upgrade: 0,
@@ -179,7 +179,7 @@ impl ItemSpawner {
             }
             let kind = item.weapon_type.as_ref();
             let id = kind.map(|kind| kind.id).unwrap_or(0);
-            let name = kind.map(|kind| kind.name.as_str()).unwrap_or("Other weapons");
+            let name = kind.map(|kind| kind.name.as_str()).unwrap_or("其他武器");
             groups.entry(id).or_insert_with(|| (name, Vec::new())).1.push(index);
         }
         // Use the complete catalog's PARAM order so a partial filter cannot
@@ -199,7 +199,7 @@ impl ItemSpawner {
 
     fn spawn(&mut self) {
         if self.sentinel.get().is_none() {
-            self.logs.push("Not spawning item when not in game".into());
+            self.logs.push("尚未进入游戏，无法生成物品".into());
             return;
         }
         if self.items.is_empty() {
@@ -207,21 +207,21 @@ impl ItemSpawner {
         }
         self.clamp_options();
         let Some(item) = self.current.and_then(|index| self.items.get(index)) else {
-            self.logs.push("No item selected".into());
+            self.logs.push("未选择物品".into());
             return;
         };
         let Some(item_id) = item.spawn_id(self.variant, self.upgrade) else {
-            self.logs.push("Invalid upgrade or affinity".into());
+            self.logs.push("无效的强化等级或质变".into());
             return;
         };
         let Some(manager) =
             PointerChain::<usize>::new(&[self.map_item_man]).read().filter(|p| *p != 0)
         else {
-            self.logs.push("Item manager is not loaded".into());
+            self.logs.push("物品管理器尚未加载".into());
             return;
         };
         self.logs.push(format!(
-            "Spawning {} x {} +{} (#{:08X})",
+            "生成 {} x {} +{} (#{:08X})",
             self.qty, item.name, self.upgrade, item_id
         ));
         unsafe {
@@ -271,17 +271,17 @@ impl Widget for ItemSpawner {
             let mut changed = filter_input(
                 ui,
                 "##item-spawn-filter",
-                "Filter name or ID...",
+                "筛选名称或 ID...",
                 &mut self.filter_string,
             );
             changed |= ui.combo_simple_string("##item-source", &mut self.source_filter, &[
-                "All items",
-                "Base game",
+                "所有物品",
+                "游戏本体",
                 "DLC",
             ]);
-            changed |= ui.checkbox("Show unused / cut content", &mut self.include_unused);
+            changed |= ui.checkbox("显示未使用/删减内容", &mut self.include_unused);
             ui.same_line();
-            if ui.button("Refresh") {
+            if ui.button("刷新") {
                 self.refresh();
             }
             if changed {
@@ -334,9 +334,9 @@ impl Widget for ItemSpawner {
                     });
                 }
                 if self.items.is_empty() {
-                    ui.text("Waiting for game data...");
+                    ui.text("等待游戏数据...");
                 } else if self.filtered.is_empty() {
-                    ui.text("No matching items");
+                    ui.text("没有匹配的物品");
                 }
             });
             self.select(selection);
@@ -350,7 +350,7 @@ impl Widget for ItemSpawner {
                                 .iter()
                                 .find(|(offset, _)| *offset == v.affinity)
                                 .map(|(_, name)| (*name).to_owned())
-                                .unwrap_or_else(|| format!("Affinity {}", v.affinity))
+                                .unwrap_or_else(|| format!("质变 {}", v.affinity))
                         })
                         .collect()
                 })
@@ -383,7 +383,7 @@ impl Widget for ItemSpawner {
             {
                 let _disabled = ui.begin_disabled(item.is_none());
                 let _width = ui.push_item_width(0.);
-                ui.slider_config("Qty", 1, item.map(|item| item.max_quantity).unwrap_or(99))
+                ui.slider_config("数量", 1, item.map(|item| item.max_quantity).unwrap_or(99))
                     .build(&mut self.qty);
             }
             {
@@ -393,7 +393,7 @@ impl Widget for ItemSpawner {
                     self.spawn();
                 }
             }
-            if ui.button_with_size("Clear", [400., button_height]) {
+            if ui.button_with_size("清除", [400., button_height]) {
                 self.clear();
             }
             if ui.button_with_size(&self.label_close, [400., button_height])

@@ -41,7 +41,7 @@ impl Warp {
         hotkey_close: Key,
     ) -> Self {
         Self {
-            label_close: format!("Close ({hotkey_close})"),
+            label_close: format!("关闭 ({hotkey_close})"),
             hotkey_close,
             warp_ptr,
             arg1,
@@ -91,7 +91,7 @@ impl Warp {
             return;
         }
         let warp_fn: WarpFunc = unsafe { mem::transmute(self.warp_ptr) };
-        info!("Warping to {} (entity {})", grace.name, grace.entity_id);
+        info!("传送到 {} (实体 {})", grace.name, grace.entity_id);
         warp_fn(arg1, arg2, grace.entity_id);
     }
 }
@@ -105,7 +105,7 @@ impl Widget for Warp {
             igGetWindowPos(&mut wnd_pos);
             (igGetCursorPosX() + wnd_pos.x, igGetCursorPosY() + wnd_pos.y)
         };
-        if ui.button_with_size("Warp to Grace", [BUTTON_WIDTH * scale, button_height]) {
+        if ui.button_with_size("传送到赐福点", [BUTTON_WIDTH * scale, button_height]) {
             self.refresh();
             ui.open_popup(POPUP_TAG);
         }
@@ -133,14 +133,14 @@ impl Widget for Warp {
                 self.refresh();
             }
             let _width = ui.push_item_width(400.);
-            if filter_input(ui, "##warp-filter", "Filter...", &mut self.filter_string) {
+            if filter_input(ui, "##warp-filter", "过滤器...", &mut self.filter_string) {
                 self.filter();
             }
             let preview = self
                 .current_grace
                 .and_then(|i| self.graces.get(i))
                 .map(|g| g.label.as_str())
-                .unwrap_or("No matching graces");
+                .unwrap_or("没有匹配的赐福");
             request_text(ui, preview);
             if let Some(_combo) = ui.begin_combo("##warp-graces", display_text(ui, preview)) {
                 for &index in &self.filtered {
@@ -160,12 +160,12 @@ impl Widget for Warp {
                 }
             }
             if self.graces.is_empty() {
-                ui.text("Waiting for game data...");
+                ui.text("等待游戏数据...");
             }
             {
                 let _disabled = ui
                     .begin_disabled(self.current_grace.is_none() || self.sentinel.get().is_none());
-                if ui.button_with_size("Warp", [400., button_height]) {
+                if ui.button_with_size("传送", [400., button_height]) {
                     self.warp();
                 }
             }
