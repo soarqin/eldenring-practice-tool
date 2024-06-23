@@ -29,8 +29,8 @@ impl ReadWrite for CycleSpeed {
         self.label.clear();
 
         match self.current {
-            Some(c) => write!(self.label, "Speed [{:.1}x]", c).ok(),
-            None => write!(self.label, "Speed").ok(),
+            Some(c) => write!(self.label, "速度 [{:.1}x]", c).ok(),
+            None => write!(self.label, "速度").ok(),
         };
 
         self.current.is_some()

@@ -1,35 +1,30 @@
-Welcome to the Elden Ring Practice Tool!
+欢迎使用艾尔登法环练习工具!
 
 ----------------------------------------------------------------------------------------------------
-# Getting started
+# 开始使用
 
-- Extract all files from the zip archive. Anywhere will do.
-- Double-click `eldenring.exe` to start the game (Steam → right click **ELDEN
-  RING** → Manage → Browse Local Files). Never start the game from Steam: the tool won't work.
-- Double-click `jdsd_er_practice_tool.exe` and pick an option.
+- 将zip内所有文件解压到任意文件夹
+- 双击 `eldenring.exe` 启动游戏(Steam → 在 **艾尔登法环** 上右键 → 管理 → 浏览本体文件)。不要从Steam启动游戏，否则本工具无法正常使用。
+- 双击 `jdsd_er_practice_tool.exe` 并选择一个选项。
 
-# Run the tool
+# 运行工具
 
-The tool will automatically appear over the game. Press `0` to open and close its interface.
+工具会自动在游戏内出现，按 `0` 开关界面。
 
-# Install/update the tool
+# 安装/更新工具
 
-Just follow the instructions on screen.
-This will install/update the tool next to your `eldenring.exe` game. 
+只要按照屏幕上的说明操作即可。
+这会将工具安装到游戏目录(和`eldenring.exe`同目录)。 
 
-Once you have installed the tool, you will be able to start it by holding down the right shift key
-for a few seconds while the game is loading. You can also continue using the executable to start it.
+安装好工具后，启动游戏时按住右Shift数秒直到练习工具界面出现。你也可以重新运行`jdsd_er_practice_tool.exe`来手动挂载。
 
-If you don't want to load the tool, just don't hold right shift during startup!
+如果不要在启动时挂载本工具，只需要不按右Shift即可。
 ----------------------------------------------------------------------------------------------------
 
-If you have issues or questions, thoroughly check the FAQ.
-If you can't find what you need there, feel free to open an issue or join the discord.
+如果发现或者遇到问题，可以检查 FAQ
+如果以上说明没能让你成功启动工具，那么欢迎提交Issue或者来Discord反馈问题
 
-You can find the FAQ here:
-https://github.com/veeenu/eldenring-practice-tool#readme
-
-If you enjoy the tool, please consider supporting me:
+如果你喜欢这个工具，请考虑支持(捐助)我：
 https://patreon.com/johndisandonato
 
 -- johndisandonato

@@ -21,7 +21,7 @@ pub enum Update {
 
 impl Update {
     pub fn check() -> Self {
-        info!("Checking for updates...");
+        info!("正在检查更新...");
         #[derive(serde::Deserialize)]
         struct GithubRelease {
             tag_name: String,
@@ -50,8 +50,8 @@ impl Update {
                 None => release.body,
             };
             let notes = format!(
-                "A new version of the practice tool is available!\n\nLatest version:    \
-                 {}\nInstalled version: {}\n\nRelease notes:\n{}\n",
+                "发现有新版练习工具！\n\n最新版本:    \
+                 {}\n已安装版本: {}\n\n更新内容:\n{}\n",
                 version, PRACTICE_TOOL_VERSION, notes
             );
 

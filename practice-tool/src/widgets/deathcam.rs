@@ -40,5 +40,5 @@ pub(crate) fn deathcam(
     seven: PointerChain<u8>,
     key: Option<Key>,
 ) -> Box<dyn Widget> {
-    Box::new(FlagWidget::new("Deathcam", Deathcam::new(flag, flag_torrent, seven), key))
+    Box::new(FlagWidget::new("死亡视角", Deathcam::new(flag, flag_torrent, seven), key))
 }

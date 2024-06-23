@@ -38,5 +38,5 @@ pub(crate) fn action_freeze(
     states: (u8, u8),
     key: Option<Key>,
 ) -> Box<dyn Widget> {
-    Box::new(FlagWidget::new("Action freeze", ActionFreeze::new(ptr, states), key))
+    Box::new(FlagWidget::new("冻结行动", ActionFreeze::new(ptr, states), key))
 }
