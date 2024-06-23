@@ -9,7 +9,6 @@ name = "jdsd_er_param_tinkerer"
 
 [dependencies]
 imgui = { workspace = true }
-imgui-sys = { workspace = true }
 libeldenring = { path = "../libeldenring" }
 hudhook = { workspace = true }
 tracing-subscriber = "0.3.16"

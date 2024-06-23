@@ -92,8 +92,8 @@ impl Target {
 
         Target {
             label: hotkey
-                .map(|k| format!("Target entity info ({k})"))
-                .unwrap_or_else(|| "Target entity info".to_string()),
+                .map(|k| format!("目标单位信息 ({k})"))
+                .unwrap_or_else(|| "目标单位信息".to_string()),
             alloc_addr,
             detour_addr,
             detour_orig_data: Default::default(),
@@ -205,7 +205,7 @@ impl Widget for Target {
         let Some(EnemyInfo { hp, max_hp, mp, max_mp, sp, max_sp, res, poise }) = self.get_data()
         else {
             if self.is_enabled {
-                ui.text("No enemy locked on")
+                ui.text("未锁定敌人")
             };
             return;
         };
@@ -276,19 +276,19 @@ impl Widget for Target {
         pbar("SP", sp, max_sp, COLOR_SP);
         pbar("MP", mp, max_mp, COLOR_MP);
 
-        ui.text(format!("Poise    {:>6.0}/{:>6.0} {:.2}s", poise, poise_max, poise_time));
+        ui.text(format!("韧性    {:>6.0}/{:>6.0} {:.2}s", poise, poise_max, poise_time));
         let pct = if poise_max.abs() < 0.0001 { 0.0 } else { poise / poise_max };
         let tok = ui.push_style_color(StyleColor::PlotHistogram, COLOR_BASE);
         ProgressBar::new(pct).size(pbar_size).overlay_text("").build(ui);
         drop(tok);
 
-        pbar("Poison", poison, poison_max, COLOR_POISON);
-        pbar("Rot", rot, rot_max, COLOR_ROT);
-        pbar("Bleed", bleed, bleed_max, COLOR_BLEED);
-        pbar("Blight", blight, blight_max, COLOR_BLIGHT);
-        pbar("Frost", frost, frost_max, COLOR_FROST);
-        pbar("Sleep", sleep, sleep_max, COLOR_SLEEP);
-        pbar("Mad", mad, mad_max, COLOR_MAD);
+        pbar("中毒", poison, poison_max, COLOR_POISON);
+        pbar("腐败", rot, rot_max, COLOR_ROT);
+        pbar("出血", bleed, bleed_max, COLOR_BLEED);
+        pbar("死亡", blight, blight_max, COLOR_BLIGHT);
+        pbar("冻伤", frost, frost_max, COLOR_FROST);
+        pbar("催眠", sleep, sleep_max, COLOR_SLEEP);
+        pbar("发狂", mad, mad_max, COLOR_MAD);
     }
 
     fn interact(&mut self, ui: &imgui::Ui) {

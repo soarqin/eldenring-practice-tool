@@ -24,12 +24,12 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 fn install() -> Result<()> {
     message_box(
-        "johndisandonato's Elden Ring practice tool",
-        "Welcome to the Elden Ring practice tool's installer!\n\nPlease start Elden Ring, if you \
-         haven't done so yet.\n\nIf you have multiple Elden Ring installations (e.g. different \
-         patches for speedrunning), you have to run this installer for each of them.\n\nThe \
-         installer will create a file named `dinput8.dll` next to the game's executable. If you \
-         want to uninstall the tool, just remove it.\n\nLet's go!"
+        "johndisandonato的艾尔登法环练习工具",
+        "欢迎使用艾尔登法环练习工具安装器!\n\n如果还没启动艾尔登法环请先启动。\n\n \
+         如果你安装了多个版本的法环 (通常是为了速通快速切换版本)，\n\n \
+         你必须为每个版本运行一次本安装器。\n\n \
+         安装器会在游戏可执行文件所在目录创建一个 `dinput8.dll`，如果要卸载练习工具， \
+         只需要删除这个文件。\n\n那么我们开始吧！"
             .trim(),
         MB_OK,
     );
@@ -38,16 +38,16 @@ fn install() -> Result<()> {
     let process = Process::by_name("eldenring.exe").map_err(|_| {
         anyhow!(dedent!(
             r#"
-            Could not find the ELDEN RING process.
+            找不到艾尔登法环进程。
 
-            If it is not running, start it.
-
-            If you have and it's not working, make sure to follow these steps:
-            - Disable running antivirus software and uninstall any mods.
-            - Start Steam (offline mode is fine).
-            - Double-click eldenring.exe
-              (Steam > ELDEN RING > Manage > Browse Local Files).
-            - Double-click install.exe.
+            请先确认已经启动游戏。
+            
+            如果游戏已经启动，确认遵循以下步骤：
+            - 禁用杀毒软件并卸载所有mod
+            - 启动Steam (可以离线模式)
+            - 双击 eldenring.exe
+              (Steam > 艾尔登法环 > 管理 > 浏览本地文件)
+            - 双击 jdsd_er_practice_tool.exe
             "#
         )
         .trim())
@@ -58,13 +58,12 @@ fn install() -> Result<()> {
 
     let config_path = dll_path
         .parent()
-        .ok_or_else(|| anyhow!("{dll_path:?} has no parent"))?
+        .ok_or_else(|| anyhow!("{dll_path:?} 没有父目录"))?
         .join("jdsd_er_practice_tool.toml");
 
     if !config_path.exists() {
         bail!(
-            "Could not find jdsd_er_practice_tool.toml.\nPlease make sure you have extracted the \
-             zip file before running the installer."
+            "找不到 jdsd_er_practice_tool.toml。\n请确保运行安装器前你已经解压了完整的zip内容。"
         );
     }
 
@@ -81,11 +80,9 @@ fn install() -> Result<()> {
 
     if dll_path_dest.exists() {
         if message_box(
-            "Close Elden Ring",
-            "It appears that the tool is already installed in the currently running Elden Ring \
-             process.\n\nI will close it to continue the installation. Make sure you have quit \
-             out to main menu, and then click \"Ok\".\n\nIf you don't want to close the game \
-             right now, click \"Cancel\" to abort the \ntool's installation.",
+            "关闭艾尔登法环",
+            "看起来当前艾尔登法环已经安装了练习工具。\n\n现在将关闭游戏以继续安装过程。请确保你已经 \
+             退回到主菜单，并且点击了 \"确定\".\n\n如果你现在不想关闭游戏，请点击 \"取消\" 中断安装。",
             MB_OKCANCEL | MB_ICONINFORMATION,
         ) != MESSAGEBOX_RESULT(1)
         {
@@ -93,27 +90,26 @@ fn install() -> Result<()> {
             return Ok(());
         } else {
             unsafe { TerminateProcess(process.handle(), 1) }
-                .map_err(|e| anyhow!("Could not close Elden Ring: {e}"))?;
+                .map_err(|e| anyhow!("无法关闭艾尔登法环: {e}"))?;
         }
     }
 
     std::fs::copy(&dll_path, &dll_path_dest).map_err(|e| {
         anyhow!(
-            "Could not install DLL: {e}\nWhile trying to copy\n{dll_path:?}\nto\n{dll_path_dest:?}"
+            "无法装DLL: {e}\n当尝试复制\n{dll_path:?}\n到\n{dll_path_dest:?}时"
         )
     })?;
     std::fs::copy(&config_path, &config_path_dest).map_err(|e| {
         anyhow!(
-            "Could not install config file: {e}\nWhile trying to \
-             copy\n{config_path:?}\nto\n{config_path_dest:?}"
+            "无法安装设置文件: {e}\n当尝试 \
+             复制\n{config_path:?}\n到\n{config_path_dest:?}时"
         )
     })?;
 
     message_box(
-        "Success",
-        "The tool was installed successfully.\n\nTo use it, restart the game, and hold right \
-         shift for a few seconds during startup until the tool appears on screen.\n\nHappy video \
-         gaming!",
+        "成功",
+        "练习工具安装成功。\n\n要使用练习工具，请重启游戏并按住右Shift数秒直到工具界面出现。\n\n \
+         祝你游戏愉快！",
         MB_ICONINFORMATION,
     );
 
@@ -124,7 +120,7 @@ fn main() -> Result<()> {
     tracing_init();
 
     if let Err(e) = install() {
-        message_box("Error", e.to_string(), MB_OK | MB_ICONERROR);
+        message_box("错误", e.to_string(), MB_OK | MB_ICONERROR);
     }
 
     Ok(())

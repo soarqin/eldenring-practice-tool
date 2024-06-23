@@ -66,15 +66,15 @@ impl PracticeTool {
                     path.push("jdsd_er_practice_tool.toml");
                     path
                 })
-                .ok_or_else(|| "Couldn't find config file".to_string())?;
+                .ok_or_else(|| "找不到设置文件".to_string())?;
 
             if !config_path.exists() {
                 std::fs::write(&config_path, include_str!("../../jdsd_er_practice_tool.toml"))
-                    .map_err(|e| format!("Couldn't write default config file: {}", e))?;
+                    .map_err(|e| format!("找不到设置文件: {}", e))?;
             }
 
             let config_content = std::fs::read_to_string(config_path)
-                .map_err(|e| format!("Couldn't read config file: {}", e))?;
+                .map_err(|e| format!("无法读取设置文件: {}", e))?;
             println!("{}", config_content);
             Config::parse(&config_content).map_err(String::from)
         }
@@ -86,8 +86,7 @@ impl PracticeTool {
                 Some({
                     error!("{}", e);
                     format!(
-                        "Configuration error, please review your jdsd_er_practice_tool.toml \
-                         file.\n\n{e}"
+                        "设置错误，请检查jdsd_er_practice_tool.toml的内容\n\n{e}"
                     )
                 }),
             ),
@@ -126,8 +125,8 @@ impl PracticeTool {
                     .init();
             },
             e => match e {
-                None => error!("Could not construct log file path"),
-                Some(Err(e)) => error!("Could not initialize log file: {:?}", e),
+                None => error!("无法创建log文件目录"),
+                Some(Err(e)) => error!("无法初始化log文件: {:?}", e),
                 _ => unreachable!(),
             },
         }
@@ -163,12 +162,12 @@ impl PracticeTool {
         let pointers = Pointers::new();
         let version_label = {
             let (maj, min, patch) = (*VERSION).into();
-            format!("Game Ver {}.{:02}.{}", maj, min, patch)
+            format!("游戏版本 {}.{:02}.{}", maj, min, patch)
         };
         let settings = config.settings.clone();
         let widgets = config.make_commands(&pointers);
         let (log_tx, log_rx) = crossbeam_channel::unbounded();
-        info!("Practice tool initialized");
+        info!("练习工具初始化完毕");
 
         PracticeTool {
             settings,
@@ -214,14 +213,14 @@ impl PracticeTool {
                     w.render(ui);
                 }
 
-                if ui.button_with_size("Close", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
+                if ui.button_with_size("关闭", [BUTTON_WIDTH * scaling_factor(ui), BUTTON_HEIGHT])
                 {
                     self.ui_state = UiState::Closed;
                     self.pointers.cursor_show.set(false);
                 }
 
                 if option_env!("CARGO_XTASK_DIST").is_none()
-                    && ui.button_with_size("Eject", [
+                    && ui.button_with_size("卸载", [
                         BUTTON_WIDTH * scaling_factor(ui),
                         BUTTON_HEIGHT,
                     ])
@@ -252,17 +251,17 @@ impl PracticeTool {
                     | WindowFlags::ALWAYS_AUTO_RESIZE
             })
             .build(|| {
-                ui.text("johndisandonato's Practice Tool");
+                ui.text("johndisandonato的练习工具");
 
                 ui.same_line();
 
-                if ui.small_button("Open") {
+                if ui.small_button("打开") {
                     self.ui_state = UiState::MenuOpen;
                 }
 
                 ui.same_line();
 
-                if ui.small_button("Help") {
+                if ui.small_button("帮助") {
                     ui.open_popup("##help_window");
                 }
 
@@ -297,19 +296,17 @@ impl PracticeTool {
                     .build(|| {
                         self.pointers.cursor_show.set(true);
                         ui.text(formatcp!(
-                            "Elden Ring Practice Tool v{}.{}.{}",
+                            "艾尔登法环练习工具 v{}.{}.{}",
                             MAJOR,
                             MINOR,
                             PATCH
                         ));
                         ui.separator();
                         ui.text(format!(
-                            "Press the {} key to open/close the tool's\ninterface.\n\nYou can \
-                             toggle flags/launch commands by\nclicking in the UI or by \
-                             pressing\nthe hotkeys (in the parentheses).\n\nYou can configure \
-                             your tool by editing\nthe jdsd_er_practice_tool.toml file with\na \
-                             text editor. If you break something,\njust download a fresh \
-                             file!\n\nThank you for using my tool! <3\n",
+                            "请按{}键开关工具界面。\n\n你可以点击UI按键或者按下快捷键(方括号内)切换\
+                             功能/运行指令\n\n你可以用文本编辑器修改jdsd_er_practice_tool.toml配置\
+                             工具的功能。\n如果不小心改坏了配置文件，可以下载原始的配置文件覆盖\n\n\
+                             感谢使用我的工具! <3\n",
                             self.settings.display
                         ));
                         ui.separator();
@@ -319,14 +316,14 @@ impl PracticeTool {
                             open::that("https://twitch.tv/johndisandonato").ok();
                         }
                         ui.separator();
-                        if ui.button("Submit issue") {
+                        if ui.button("提交问题") {
                             open::that(
                                 "https://github.com/veeenu/eldenring-practice-tool/issues/new",
                             )
                             .ok();
                         }
                         ui.same_line();
-                        if ui.button("Support") {
+                        if ui.button("赞助") {
                             open::that("https://patreon.com/johndisandonato").ok();
                         }
                         ui.same_line();
@@ -555,21 +552,40 @@ impl ImguiRenderLoop for PracticeTool {
 
     fn initialize(&mut self, ctx: &mut Context, _: &mut dyn RenderContext) {
         let fonts = ctx.fonts();
+        let config_small = FontConfig {
+            size_pixels: 11.,
+            oversample_h: 2,
+            oversample_v: 1,
+            pixel_snap_h: false,
+            glyph_extra_spacing: [0., 0.],
+            glyph_offset: [0., 0.],
+            glyph_ranges: imgui::FontGlyphRanges::chinese_full(),
+            glyph_min_advance_x: 0.,
+            glyph_max_advance_x: f32::MAX,
+            font_builder_flags: 0,
+            rasterizer_multiply: 1.,
+            ellipsis_char: None,
+            name: Some(String::from("WenQuanYiMicroHeiMono")),
+        };
+        let mut config_normal = config_small.clone();
+        config_normal.size_pixels = 18.;
+        let mut config_big = config_small.clone();
+        config_big.size_pixels = 24.;
         self.fonts = Some(FontIDs {
             small: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: include_bytes!("../../lib/data/WenQuanYiMicroHeiMono.ttf"),
                 size_pixels: 11.,
-                config: None,
+                config: Some(config_small),
             }]),
             normal: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: include_bytes!("../../lib/data/WenQuanYiMicroHeiMono.ttf"),
                 size_pixels: 18.,
-                config: None,
+                config: Some(config_normal),
             }]),
             big: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                data: include_bytes!("../../lib/data/WenQuanYiMicroHeiMono.ttf"),
                 size_pixels: 24.,
-                config: None,
+                config: Some(config_big),
             }]),
         });
     }
