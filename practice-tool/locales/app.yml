@@ -1,0 +1,9 @@
+
+UseSystemFont:
+  en: 'No'
+  zh-CN: 'Yes'
+Game Ver %{major}.%{minor}.%{patch}:
+  en: 'Game Ver %{major}.%{minor}.%{patch}'
+  zh-CN: '游戏版本 %{major}.%{minor}.%{patch}'
+_version: 2
+

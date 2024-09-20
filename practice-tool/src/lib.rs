@@ -42,6 +42,8 @@ use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_RSHIFT};
 
+rust_i18n::i18n!("locales");
+
 type FDirectInput8Create = unsafe extern "stdcall" fn(
     hinst: HINSTANCE,
     dwversion: u32,
@@ -136,6 +138,9 @@ unsafe fn apply_font_patch() {
 }
 
 fn start_practice_tool(hmodule: HINSTANCE) {
+    practice_tool_core::i18n_set_locale("zh-CN");
+    rust_i18n::set_locale("zh-CN");
+
     let practice_tool = PracticeTool::new();
 
     unsafe {

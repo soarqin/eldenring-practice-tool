@@ -1,4 +1,6 @@
+use std::env;
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -13,6 +15,7 @@ use pkg_version::*;
 use practice_tool_core::crossbeam_channel::{self, Receiver, Sender};
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 use tracing_subscriber::prelude::*;
+use rust_i18n::t;
 
 use crate::config::{Config, IndicatorType, Settings};
 use crate::update::Update;
@@ -173,7 +176,7 @@ impl PracticeTool {
         let pointers = Pointers::new();
         let version_label = {
             let (maj, min, patch) = version::get_version().into();
-            format!("Game Ver {}.{:02}.{}", maj, min, patch)
+            t!("Game Ver %{major}.%{minor}.%{patch}", major = maj, minor = min : {:02}, patch = patch).to_string()
         };
         let settings = config.settings.clone();
         let widgets = config.make_commands(&pointers);
@@ -701,23 +704,87 @@ impl ImguiRenderLoop for PracticeTool {
 
     fn initialize(&mut self, ctx: &mut Context, _: &mut dyn RenderContext) {
         let fonts = ctx.fonts();
-        self.fonts = Some(FontIDs {
-            small: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 11.,
-                config: None,
-            }]),
-            normal: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 18.,
-                config: None,
-            }]),
-            big: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 24.,
-                config: None,
-            }]),
-        });
+
+        match t!("UseSystemFont").to_lowercase().as_str() {
+            "true" | "yes" | "on" | "1" => {
+                let mut system_font_dir = "C:\\Windows\\Fonts".to_string();
+                match env::var_os("windir") {
+                    Some(x) => {
+                        let path = PathBuf::from(x).join("Fonts");
+                        if path.is_dir() {
+                            system_font_dir = path.to_str().unwrap().into();
+                        }
+                    },
+                    None => {},
+                };
+                let mut font_data = Vec::new();
+                for filename in ["dengb.ttf", "deng.ttf", "msyh.ttc", "msjhbd.ttc", "msjh.ttc", "simsun.ttc", "mingliub.ttc"] {
+                    let path = format!("{}\\{}", system_font_dir, filename);
+                    match std::fs::read(path) {
+                        Ok(data) => {
+                            font_data = data;
+                            break;
+                        },
+                        Err(_) => {},
+                    }
+                }
+                let config_small = FontConfig {
+                    size_pixels: 11.,
+                    oversample_h: 2,
+                    oversample_v: 1,
+                    pixel_snap_h: false,
+                    glyph_extra_spacing: [0., 0.],
+                    glyph_offset: [0., 0.],
+                    glyph_ranges: imgui::FontGlyphRanges::chinese_full(),
+                    glyph_min_advance_x: 0.,
+                    glyph_max_advance_x: f32::MAX,
+                    font_builder_flags: 0,
+                    rasterizer_multiply: 1.,
+                    ellipsis_char: None,
+                    name: Some(String::from("Chinese Font")),
+                };
+                let mut config_normal = config_small.clone();
+                config_normal.size_pixels = 18.;
+                let mut config_big = config_small.clone();
+                config_big.size_pixels = 24.;
+                self.fonts = Some(FontIDs {
+                    small: fonts.add_font(&[FontSource::TtfData {
+                        data: &font_data[..],
+                        size_pixels: 11.,
+                        config: Some(config_small),
+                    }]),
+                    normal: fonts.add_font(&[FontSource::TtfData {
+                        data: &font_data[..],
+                        size_pixels: 18.,
+                        config: Some(config_normal),
+                    }]),
+                    big: fonts.add_font(&[FontSource::TtfData {
+                        data: &font_data[..],
+                        size_pixels: 24.,
+                        config: Some(config_big),
+                    }]),
+                });
+            },
+            &_ => {
+                self.fonts = Some(FontIDs {
+                    small: fonts.add_font(&[FontSource::TtfData {
+                        data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                        size_pixels: 11.,
+                        config: None,
+                    }]),
+                    normal: fonts.add_font(&[FontSource::TtfData {
+                        data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                        size_pixels: 18.,
+                        config: None,
+                    }]),
+                    big: fonts.add_font(&[FontSource::TtfData {
+                        data: include_bytes!("../../lib/data/ComicMono.ttf"),
+                        size_pixels: 24.,
+                        config: None,
+                    }]),
+                });
+            },
+        }
     }
 }
 

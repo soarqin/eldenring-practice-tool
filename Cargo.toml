@@ -28,7 +28,7 @@ imgui-sys = "0.12.0"
 once_cell = "1.19.0"
 parking_lot = "0.12.1"
 hudhook = { version = "0.7.0", features = ["dx12", "inject"], default-features = false }
-practice-tool-core = { git = "https://github.com/veeenu/practice-tool-core", version = "0.1.0" }
+practice-tool-core = { git = "https://github.com/soarqin/practice-tool-core", branch="i18n_support", version = "0.1.0" }
 practice-tool-tasks = { git = "https://github.com/veeenu/practice-tool-core", version = "0.1.0" }
 
 [workspace.dependencies.windows]
