@@ -10,6 +10,7 @@ use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 
 use super::font_text::{display_text, filter_input};
+use super::pinyin_match::{pinyin_match, Segment};
 use super::string_match;
 use crate::fonts::request_text;
 
@@ -50,6 +51,7 @@ pub(crate) struct ItemSpawner {
     include_unused: bool,
     logs: Vec<String>,
     items: Vec<Item>,
+    pinyin: Vec<Segment>,
     filtered: Vec<usize>,
     last_read: Option<Instant>,
 }
@@ -83,6 +85,7 @@ impl ItemSpawner {
             include_unused: false,
             logs: Vec::new(),
             items: Vec::new(),
+            pinyin: Vec::new(),
             filtered: Vec::new(),
             last_read: None,
         }
@@ -91,6 +94,7 @@ impl ItemSpawner {
     fn refresh(&mut self) {
         let previous = self.current.and_then(|i| self.items.get(i)).map(|item| item.id);
         self.items = self.data.items().unwrap_or_default();
+        self.pinyin = self.items.iter().map(|item| Segment::from_name(&item.name)).collect();
         self.current = previous.and_then(|id| self.items.iter().position(|item| item.id == id));
         self.last_read = Some(Instant::now());
         self.filter();
@@ -98,6 +102,7 @@ impl ItemSpawner {
     }
 
     fn filter(&mut self) {
+        debug_assert_eq!(self.items.len(), self.pinyin.len());
         let filter = self.filter_string.trim();
         let decimal = filter.parse::<u32>().ok();
         let hexadecimal = filter
@@ -109,10 +114,11 @@ impl ItemSpawner {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| {
+            .filter(|(index, item)| {
                 (self.include_unused || item.category != ItemCategory::Unused)
                     && (self.source_filter == 0 || item.dlc == (self.source_filter == 2))
                     && (string_match(filter, &item.name)
+                        || pinyin_match(filter, &self.pinyin[*index])
                         || [decimal, hexadecimal]
                             .into_iter()
                             .flatten()

@@ -9,11 +9,18 @@ use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 
 use super::font_text::{display_text, filter_input};
+use super::pinyin_match::{pinyin_match, pinyin_match_start, Segment};
 use super::string_match;
 use crate::fonts::request_text;
 
 type WarpFunc = extern "system" fn(u64, u64, u32);
 const POPUP_TAG: &str = "##warp";
+
+#[derive(Debug)]
+struct GracePinyinEntry {
+    region: Segment,
+    location: Segment,
+}
 
 #[derive(Debug)]
 pub(crate) struct Warp {
@@ -25,6 +32,7 @@ pub(crate) struct Warp {
     sentinel: &'static Bitflag<u8>,
     data: GameData,
     graces: Vec<Grace>,
+    pinyin: Vec<GracePinyinEntry>,
     current_grace: Option<usize>,
     filter_string: String,
     filtered: Vec<usize>,
@@ -49,6 +57,7 @@ impl Warp {
             data,
             sentinel,
             graces: Vec::new(),
+            pinyin: Vec::new(),
             current_grace: None,
             filter_string: String::new(),
             filtered: Vec::new(),
@@ -57,21 +66,53 @@ impl Warp {
     }
 
     fn refresh(&mut self) {
-        let previous = self.current_grace.and_then(|i| self.graces.get(i)).map(|g| g.id);
-        self.graces = self.data.graces().unwrap_or_default();
-        self.current_grace = previous.and_then(|id| self.graces.iter().position(|g| g.id == id));
+        self.set_graces(self.data.graces().unwrap_or_default());
         self.last_read = Some(Instant::now());
+    }
+
+    fn set_graces(&mut self, graces: Vec<Grace>) {
+        let previous = self.current_grace.and_then(|i| self.graces.get(i)).map(|g| g.id);
+        self.pinyin = graces
+            .iter()
+            .map(|grace| GracePinyinEntry {
+                region: Segment::from_name(&grace.region),
+                location: Segment::from_name(&grace.name),
+            })
+            .collect();
+        self.graces = graces;
+        self.current_grace = previous.and_then(|id| self.graces.iter().position(|g| g.id == id));
         self.filter();
     }
 
     fn filter(&mut self) {
-        self.filtered = self
-            .graces
-            .iter()
-            .enumerate()
-            .filter(|(_, grace)| string_match(&self.filter_string, &grace.label))
-            .map(|(index, _)| index)
-            .collect();
+        if self.filter_string.is_empty() {
+            self.filtered = (0..self.graces.len()).collect();
+        } else {
+            let query = &self.filter_string;
+            let mut scored: Vec<(usize, u32)> = self
+                .graces
+                .iter()
+                .enumerate()
+                .filter_map(|(index, grace)| {
+                    let pinyin = &self.pinyin[index];
+                    if pinyin_match_start(query, &pinyin.location)
+                        || string_match(query, &grace.name)
+                    {
+                        Some((index, 2))
+                    } else if pinyin_match(query, &pinyin.region)
+                        || string_match(query, &grace.region)
+                        || pinyin_match(query, &pinyin.location)
+                        || string_match(query, &grace.label)
+                    {
+                        Some((index, 1))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            scored.sort_by_key(|entry| std::cmp::Reverse(entry.1));
+            self.filtered = scored.into_iter().map(|(index, _)| index).collect();
+        }
         if !self.current_grace.is_some_and(|i| self.filtered.contains(&i)) {
             self.current_grace = self.filtered.first().copied();
         }
@@ -175,5 +216,103 @@ impl Widget for Warp {
                 ui.close_current_popup();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grace(id: u32, region: &str, name: &str) -> Grace {
+        Grace {
+            id,
+            entity_id: id,
+            name: name.into(),
+            region: region.into(),
+            label: format!("[{region}] {name}"),
+        }
+    }
+
+    fn warp(graces: Vec<Grace>) -> Warp {
+        let argument = Box::leak(Box::new(PointerChain::new(&[0])));
+        let sentinel = Box::leak(Box::new(Bitflag::new(PointerChain::new(&[0]), 1)));
+        let addresses = base_addresses::BaseAddresses::from(Version::V2_07_2);
+        let mut warp = Warp::new(
+            0,
+            argument,
+            argument,
+            GameData::new(&addresses),
+            sentinel,
+            Key::try_from("escape").unwrap(),
+        );
+        warp.set_graces(graces);
+        warp
+    }
+
+    #[test]
+    fn location_matches_precede_region_matches_and_keep_runtime_order_for_ties() {
+        let mut warp = warp(vec![
+            grace(1, "匕首", "山洞"),
+            grace(2, "宁姆格福", "匕首山洞"),
+            grace(3, "盖利德", "匕首洞窟"),
+            grace(4, "湖之利耶尼亚", "古老匕首"),
+        ]);
+        warp.filter_string = "bs".into();
+        warp.filter();
+
+        assert_eq!(warp.filtered, vec![1, 2, 0, 3]);
+        assert_eq!(warp.current_grace, Some(0));
+        warp.current_grace = None;
+        warp.filter();
+        assert_eq!(warp.current_grace, Some(1));
+    }
+
+    #[test]
+    fn clearing_query_restores_runtime_order_and_empty_matches_clear_selection() {
+        let mut warp = warp(vec![grace(1, "宁姆格福", "山洞"), grace(2, "宁姆格福", "匕首")]);
+        warp.filter_string = "bs".into();
+        warp.filter();
+        assert_eq!(warp.filtered, vec![1]);
+        assert_eq!(warp.current_grace, Some(1));
+
+        warp.filter_string.clear();
+        warp.filter();
+        assert_eq!(warp.filtered, vec![0, 1]);
+        assert_eq!(warp.current_grace, Some(1));
+
+        warp.filter_string = "xyz".into();
+        warp.filter();
+        assert!(warp.filtered.is_empty());
+        assert_eq!(warp.current_grace, None);
+
+        warp.filter_string.clear();
+        warp.filter();
+        assert_eq!(warp.filtered, vec![0, 1]);
+        assert_eq!(warp.current_grace, Some(0));
+    }
+
+    #[test]
+    fn replacing_catalog_rebuilds_pinyin_and_preserves_selection_by_id() {
+        let mut warp = warp(vec![grace(1, "宁姆格福", "匕首"), grace(2, "宁姆格福", "长弓")]);
+        warp.filter_string = "bs".into();
+        warp.filter();
+
+        warp.set_graces(vec![grace(2, "宁姆格福", "长弓"), grace(1, "宁姆格福", "匕首")]);
+        assert_eq!(warp.filtered, vec![1]);
+        assert_eq!(warp.current_grace, Some(1));
+
+        warp.set_graces(vec![grace(2, "宁姆格福", "大赐福"), grace(1, "宁姆格福", "山洞")]);
+        assert!(warp.filtered.is_empty());
+        assert_eq!(warp.current_grace, None);
+
+        warp.filter_string = "ci".into();
+        warp.filter();
+        assert_eq!(warp.filtered, vec![0]);
+        assert_eq!(warp.current_grace, Some(0));
+
+        warp.set_graces(Vec::new());
+        assert!(warp.pinyin.is_empty());
+        assert!(warp.filtered.is_empty());
+        assert_eq!(warp.current_grace, None);
     }
 }
