@@ -1,3 +1,6 @@
+// Allow stdcall from hudhook::hudhook! macro until upstream migrates to extern
+// "system"
+#![allow(unsupported_calling_conventions)]
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::os::windows::prelude::OsStringExt;

@@ -45,7 +45,7 @@ use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_RSHIFT};
 use windows::Win32::UI::Input::XboxController::XINPUT_STATE;
 
-type FDirectInput8Create = unsafe extern "stdcall" fn(
+type FDirectInput8Create = unsafe extern "system" fn(
     hinst: HINSTANCE,
     dwversion: u32,
     riidltf: *const GUID,
@@ -53,6 +53,10 @@ type FDirectInput8Create = unsafe extern "stdcall" fn(
     punkouter: HINSTANCE,
 ) -> HRESULT;
 
+// SAFETY: Loads the real system dinput8.dll and resolves DirectInput8Create.
+// The transmute is safe because GetProcAddress returns the exact function
+// pointer matching the DLL export, and FDirectInput8Create matches the
+// documented ABI.
 static DIRECTINPUT8CREATE: Lazy<FDirectInput8Create> = Lazy::new(|| unsafe {
     let mut dinput8_path = [0u16; MAX_PATH as usize];
     let count = GetSystemDirectoryW(Some(&mut dinput8_path)) as usize;
@@ -60,7 +64,8 @@ static DIRECTINPUT8CREATE: Lazy<FDirectInput8Create> = Lazy::new(|| unsafe {
     // If count == 0, this will be fun
     ptr::copy_nonoverlapping(w!("\\dinput8.dll").0, dinput8_path[count..].as_mut_ptr(), 12);
 
-    let dinput8 = LoadLibraryW(PCWSTR(dinput8_path.as_ptr())).unwrap();
+    let dinput8 =
+        LoadLibraryW(PCWSTR(dinput8_path.as_ptr())).expect("Failed to load system dinput8.dll");
     let directinput8create = mem::transmute::<
         Option<unsafe extern "system" fn() -> isize>,
         FDirectInput8Create,
@@ -72,7 +77,7 @@ static DIRECTINPUT8CREATE: Lazy<FDirectInput8Create> = Lazy::new(|| unsafe {
 });
 
 #[no_mangle]
-unsafe extern "stdcall" fn DirectInput8Create(
+unsafe extern "system" fn DirectInput8Create(
     hinst: HINSTANCE,
     dwversion: u32,
     riidltf: *const GUID,
@@ -83,17 +88,22 @@ unsafe extern "stdcall" fn DirectInput8Create(
 }
 
 type FXInputGetState =
-    unsafe extern "stdcall" fn(dw_user_index: u32, xinput_state: *mut XINPUT_STATE) -> u32;
+    unsafe extern "system" fn(dw_user_index: u32, xinput_state: *mut XINPUT_STATE) -> u32;
 
+// SAFETY: Loads system xinput1_4.dll and hooks XInputGetState via MinHook.
+// The trampoline pointer is valid for the process lifetime since we never
+// disable the hook. The transmute produces a function pointer matching the
+// original XInputGetState ABI.
 static XINPUTGETSTATE: Lazy<FXInputGetState> = Lazy::new(|| unsafe {
     let mut path = [0u16; MAX_PATH as usize];
     let count = GetSystemDirectoryW(Some(&mut path)) as usize;
 
     ptr::copy_nonoverlapping(w!("\\xinput1_4.dll").0, path[count..].as_mut_ptr(), 14);
 
-    let lib = LoadLibraryW(PCWSTR(path.as_ptr())).unwrap();
+    let lib = LoadLibraryW(PCWSTR(path.as_ptr())).expect("Failed to load system xinput1_4.dll");
 
-    let xinput_get_state_addr = GetProcAddress(lib, s!("XInputGetState")).unwrap();
+    let xinput_get_state_addr =
+        GetProcAddress(lib, s!("XInputGetState")).expect("Failed to get XInputGetState export");
 
     match MH_Initialize() {
         MH_STATUS::MH_ERROR_ALREADY_INITIALIZED | MH_STATUS::MH_OK => {},
@@ -113,7 +123,7 @@ static XINPUTGETSTATE: Lazy<FXInputGetState> = Lazy::new(|| unsafe {
     mem::transmute(hook.trampoline())
 });
 
-unsafe extern "stdcall" fn xinput_get_state_impl(
+unsafe extern "system" fn xinput_get_state_impl(
     dw_user_index: u32,
     xinput_state: *mut XINPUT_STATE,
 ) -> u32 {
@@ -126,8 +136,13 @@ unsafe extern "stdcall" fn xinput_get_state_impl(
     r
 }
 
+/// # Safety
+///
+/// Patches the intro screen check at a known offset from the module base.
+/// The offset comes from version-specific BaseAddresses. Verifies the expected
+/// bytes before patching.
 unsafe fn apply_no_logo() {
-    let module_base = GetModuleHandleW(None).unwrap();
+    let module_base = GetModuleHandleW(None).expect("Failed to get module handle");
     let offset = BaseAddresses::from(version::get_version()).func_remove_intro_screens;
 
     let ptr = (module_base.0 as usize + offset) as *mut [u8; 2];
@@ -135,12 +150,18 @@ unsafe fn apply_no_logo() {
     if *ptr == [0x74, 0x53] && VirtualProtect(ptr as _, 2, PAGE_EXECUTE_READWRITE, &mut old).is_ok()
     {
         (*ptr) = [0x90, 0x90];
-        VirtualProtect(ptr as _, 2, old, &mut old).ok();
+        if let Err(e) = VirtualProtect(ptr as _, 2, old, &mut old) {
+            error!("apply_no_logo: VirtualProtect restore failed: {e:?}");
+        }
     }
 }
 
+/// # Safety
+///
+/// Patches two event-related instructions to enable event drawing.
+/// Verifies expected bytes [0x32, 0xC0] before writing [0xB0, 0x01].
 unsafe fn apply_event_patch() {
-    let module_base = GetModuleHandleW(None).unwrap();
+    let module_base = GetModuleHandleW(None).expect("Failed to get module handle");
 
     let offset_1 = BaseAddresses::from(version::get_version()).event_patch1;
     let offset_2 = BaseAddresses::from(version::get_version()).event_patch2;
@@ -151,7 +172,9 @@ unsafe fn apply_event_patch() {
         && VirtualProtect(ptr_1 as _, 2, PAGE_EXECUTE_READWRITE, &mut old_1).is_ok()
     {
         (*ptr_1) = [0xB0, 0x01];
-        VirtualProtect(ptr_1 as _, 2, old_1, &mut old_1).ok();
+        if let Err(e) = VirtualProtect(ptr_1 as _, 2, old_1, &mut old_1) {
+            error!("apply_event_patch: VirtualProtect restore failed: {e:?}");
+        }
     }
 
     let ptr_2 = (module_base.0 as usize + offset_2) as *mut [u8; 2];
@@ -160,19 +183,28 @@ unsafe fn apply_event_patch() {
         && VirtualProtect(ptr_2 as _, 2, PAGE_EXECUTE_READWRITE, &mut old_2).is_ok()
     {
         (*ptr_2) = [0xB0, 0x01];
-        VirtualProtect(ptr_2 as _, 2, old_2, &mut old_2).ok();
+        if let Err(e) = VirtualProtect(ptr_2 as _, 2, old_2, &mut old_2) {
+            error!("apply_event_patch: VirtualProtect restore failed: {e:?}");
+        }
     }
 }
 
+/// # Safety
+///
+/// Patches a font-related function prologue to immediately return (0xC3 = RET).
+/// Required for event drawing and altimeter display. Verifies the expected
+/// byte (0x48) before patching.
 unsafe fn apply_font_patch() {
-    let module_base = GetModuleHandleW(None).unwrap();
+    let module_base = GetModuleHandleW(None).expect("Failed to get module handle");
     let offset = BaseAddresses::from(version::get_version()).font_patch;
 
     let ptr = (module_base.0 as usize + offset) as *mut u8;
     let mut old = PAGE_PROTECTION_FLAGS(0);
     if *ptr == 0x48 && VirtualProtect(ptr as _, 1, PAGE_EXECUTE_READWRITE, &mut old).is_ok() {
         (*ptr) = 0xC3;
-        VirtualProtect(ptr as _, 1, old, &mut old).ok();
+        if let Err(e) = VirtualProtect(ptr as _, 1, old, &mut old) {
+            error!("apply_font_patch: VirtualProtect restore failed: {e:?}");
+        }
     }
 }
 
@@ -229,7 +261,7 @@ fn await_rshift() -> bool {
 
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
-pub unsafe extern "stdcall" fn DllMain(hmodule: HINSTANCE, reason: u32, _: *mut c_void) -> bool {
+pub unsafe extern "system" fn DllMain(hmodule: HINSTANCE, reason: u32, _: *mut c_void) -> bool {
     if reason == DLL_PROCESS_ATTACH {
         if version::check_version().is_err() {
             return false;

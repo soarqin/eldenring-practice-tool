@@ -30,6 +30,10 @@ pub struct PointerChain<T> {
     base: *mut T,
     offsets: Vec<usize>,
 }
+// SAFETY: PointerChain wraps a raw pointer and offsets for reading game memory
+// via ReadProcessMemory/WriteProcessMemory. The pointer is never dereferenced
+// directly — all access goes through Win32 API calls which are thread-safe.
+// The process handle (HANDLE) is also safe to share across threads.
 unsafe impl<T> Send for PointerChain<T> {}
 unsafe impl<T> Sync for PointerChain<T> {}
 
@@ -235,4 +239,6 @@ macro_rules! bytes_patch {
     ($b:expr; $($e:expr),+) => { BytesPatch::new(PointerChain::new(&[$($e,)*]), $b) }
 }
 
-pub use {bitflag, bytes_patch, pointer_chain};
+pub use bitflag;
+pub use bytes_patch;
+pub use pointer_chain;

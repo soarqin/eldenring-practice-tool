@@ -90,6 +90,9 @@ pub struct Param<T: 'static> {
 }
 
 pub struct Params(BTreeMap<String, (*const c_void, isize)>);
+// SAFETY: Params stores pointers to game param tables which are allocated once
+// during game init and remain valid for the process lifetime. The BTreeMap is
+// only mutated during refresh() which is called under a RwLock write guard.
 unsafe impl Send for Params {}
 unsafe impl Sync for Params {}
 
@@ -185,9 +188,9 @@ impl Params {
         param_idx: usize,
         visitor: &mut T,
     ) {
-        if let Some((lambda, ptr)) = PARAM_VTABLE.get(param).and_then(|lambda| {
-            unsafe { self.get_param_idx_ptr(param, param_idx) }.map(|v| (lambda, v))
-        }) {
+        if let Some((lambda, ptr)) =
+            PARAM_VTABLE.get(param).zip(unsafe { self.get_param_idx_ptr(param, param_idx) })
+        {
             lambda(ptr, visitor);
         };
     }

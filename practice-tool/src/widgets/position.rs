@@ -114,23 +114,24 @@ impl PositionStorage for SavePosition {
     }
 }
 
-impl NudgePositionStorage for SavePosition {
-    fn nudge_up(&mut self) {
+impl SavePosition {
+    fn apply_nudge(&mut self, delta: f32) {
         if let Some(y) = self.chunk_position.y.read() {
-            self.chunk_position.y.write(y + self.nudge);
+            self.chunk_position.y.write(y + delta);
         }
         if let Some(y) = self.torrent_chunk_position.y.read() {
-            self.torrent_chunk_position.y.write(y + self.nudge);
+            self.torrent_chunk_position.y.write(y + delta);
         }
+    }
+}
+
+impl NudgePositionStorage for SavePosition {
+    fn nudge_up(&mut self) {
+        self.apply_nudge(self.nudge);
     }
 
     fn nudge_down(&mut self) {
-        if let Some(y) = self.chunk_position.y.read() {
-            self.chunk_position.y.write(y - self.nudge);
-        }
-        if let Some(y) = self.torrent_chunk_position.y.read() {
-            self.torrent_chunk_position.y.write(y - self.nudge);
-        }
+        self.apply_nudge(-self.nudge);
     }
 }
 
