@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 
@@ -14,6 +15,7 @@ use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 use serde::Deserialize;
 
+use super::pinyin_match::{pinyin_match, Segment};
 use super::string_match;
 
 static AFFINITIES: [(u32, &str); 13] = [
@@ -131,7 +133,12 @@ impl ItemIDNode {
         } else {
             match self {
                 ItemIDNode::Leaf { node, value } => {
-                    if string_match(filter, node) {
+                    let is_match = string_match(filter, node)
+                        || ITEM_PINYIN_INDEX
+                            .get(node.as_str())
+                            .map(|seg| pinyin_match(filter, seg))
+                            .unwrap_or(false);
+                    if is_match {
                         Some(ItemIDNodeRef::Leaf { node, value: *value })
                     } else {
                         None
@@ -154,6 +161,25 @@ impl ItemIDNode {
 const ISP_TAG: &str = "##item-spawn";
 static ITEM_ID_TREE: Lazy<Vec<ItemIDNode>> =
     Lazy::new(|| serde_json::from_str(include_str!("item_ids.json")).unwrap());
+static ITEM_PINYIN_INDEX: Lazy<HashMap<String, Segment>> = Lazy::new(|| {
+    fn visit(node: &ItemIDNode, map: &mut HashMap<String, Segment>) {
+        match node {
+            ItemIDNode::Leaf { node, .. } => {
+                map.insert(node.clone(), Segment::from_name(node));
+            },
+            ItemIDNode::Node { children, .. } => {
+                for c in children {
+                    visit(c, map);
+                }
+            },
+        }
+    }
+    let mut map = HashMap::with_capacity(2794);
+    for n in ITEM_ID_TREE.iter() {
+        visit(n, &mut map);
+    }
+    map
+});
 
 #[derive(Debug)]
 pub(crate) struct ItemSpawner<'a> {

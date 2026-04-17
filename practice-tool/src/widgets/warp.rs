@@ -4,9 +4,11 @@ use hudhook::tracing::info;
 use imgui::sys::{igGetCursorPosX, igGetCursorPosY, igGetWindowPos, igSetNextWindowPos, ImVec2};
 use imgui::{Condition, InputText, WindowFlags};
 use libeldenring::prelude::*;
+use once_cell::sync::Lazy;
 use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 
+use super::pinyin_match::{pinyin_match, pinyin_match_start, Segment};
 use super::string_match;
 
 type WarpFunc = extern "system" fn(u64, u64, u32);
@@ -23,7 +25,7 @@ pub(crate) struct Warp {
     arg2: PointerChain<u64>,
     current_grace: usize,
     filter_string: String,
-    filter_list: [bool; GRACES.len()],
+    filtered_indices: Vec<usize>,
 }
 
 impl Warp {
@@ -43,7 +45,7 @@ impl Warp {
             arg2,
             current_grace: 0,
             filter_string: String::new(),
-            filter_list: [true; GRACES.len()],
+            filtered_indices: (0..GRACES.len()).collect(),
         }
     }
 
@@ -100,13 +102,41 @@ impl Widget for Warp {
                 .hint("过滤器...")
                 .build()
             {
-                GRACES.iter().enumerate().for_each(|(idx, (grace, _))| {
-                    self.filter_list[idx] =
-                        self.filter_string.is_empty() || string_match(&self.filter_string, grace)
-                });
+                if self.filter_string.is_empty() {
+                    self.filtered_indices = (0..GRACES.len()).collect();
+                } else {
+                    let query = &self.filter_string;
+                    let mut scored: Vec<(usize, u32)> = GRACES
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, &(grace, _))| {
+                            let data = &GRACE_PINYIN_INDEX[idx];
+                            // Location start match = 首字匹配 (highest weight)
+                            if pinyin_match_start(query, &data.location_seg)
+                                || string_match(query, data.location_name)
+                            {
+                                return Some((idx, 2));
+                            }
+                            // Region match or location partial match (lower weight)
+                            if pinyin_match(query, &data.region_seg)
+                                || string_match(query, data.region_name)
+                                || pinyin_match(query, &data.location_seg)
+                            {
+                                return Some((idx, 1));
+                            }
+                            // Full name string match fallback
+                            if string_match(query, grace) {
+                                return Some((idx, 1));
+                            }
+                            None
+                        })
+                        .collect();
+                    scored.sort_by(|a, b| b.1.cmp(&a.1));
+                    self.filtered_indices = scored.into_iter().map(|(idx, _)| idx).collect();
+                }
 
-                if !self.filter_list[self.current_grace] {
-                    self.current_grace = self.filter_list.iter().position(|f| *f).unwrap_or(0);
+                if !self.filtered_indices.contains(&self.current_grace) {
+                    self.current_grace = self.filtered_indices.first().copied().unwrap_or(0);
                 }
             }
 
@@ -116,9 +146,8 @@ impl Widget for Warp {
                 GRACES[self.current_grace].0,
                 imgui::ComboBoxFlags::HEIGHT_LARGE,
             ) {
-                for (idx, (grace, _)) in
-                    GRACES.iter().enumerate().filter(|(idx, _)| self.filter_list[*idx])
-                {
+                for &idx in &self.filtered_indices {
+                    let (grace, _) = GRACES[idx];
                     let selected = idx == self.current_grace;
                     if selected {
                         ui.set_item_default_focus();
@@ -986,3 +1015,36 @@ const GRACES: &[(&str, u32)] = &[
     ("[艾尼尔·伊利姆] 神之门", 20012950),
     ("[艾尼尔·伊利姆] 螺旋塔", 20012954),
 ];
+
+struct GracePinyinEntry {
+    region_seg: Segment,
+    location_seg: Segment,
+    region_name: &'static str,
+    location_name: &'static str,
+}
+
+fn parse_grace_name(name: &str) -> (&str, &str) {
+    if let Some(bracket_end) = name.find(']') {
+        let start = if name.starts_with('[') { '['.len_utf8() } else { 0 };
+        let region = &name[start..bracket_end];
+        let location = name[bracket_end + ']'.len_utf8()..].trim_start();
+        (region, location)
+    } else {
+        ("", name)
+    }
+}
+
+static GRACE_PINYIN_INDEX: Lazy<Vec<GracePinyinEntry>> = Lazy::new(|| {
+    GRACES
+        .iter()
+        .map(|&(name, _)| {
+            let (region_name, location_name) = parse_grace_name(name);
+            GracePinyinEntry {
+                region_seg: Segment::from_name(region_name),
+                location_seg: Segment::from_name(location_name),
+                region_name,
+                location_name,
+            }
+        })
+        .collect()
+});

@@ -8,6 +8,7 @@ pub(crate) mod item_spawn;
 pub(crate) mod label;
 pub(crate) mod multiflag;
 pub(crate) mod nudge_pos;
+pub(crate) mod pinyin_match;
 pub(crate) mod position;
 pub(crate) mod quitout;
 pub(crate) mod runes;
