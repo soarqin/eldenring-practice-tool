@@ -908,15 +908,12 @@ impl ImguiRenderLoop for PracticeTool {
         let mut config_big = config_small.clone();
 
         let mut system_font_dir = "C:\\Windows\\Fonts".to_string();
-        match env::var_os("windir") {
-            Some(x) => {
-                let path = PathBuf::from(x).join("Fonts");
-                if path.is_dir() {
-                    system_font_dir = path.to_str().unwrap().into();
-                }
-            },
-            None => {},
-        };
+        if let Some(x) = env::var_os("windir") {
+            let path = PathBuf::from(x).join("Fonts");
+            if path.is_dir() {
+                system_font_dir = path.to_str().unwrap().into();
+            }
+        }
         let mut font_data = Vec::new();
         for filename in [
             "dengb.ttf",
@@ -928,12 +925,9 @@ impl ImguiRenderLoop for PracticeTool {
             "mingliub.ttc",
         ] {
             let path = format!("{}\\{}", system_font_dir, filename);
-            match std::fs::read(path) {
-                Ok(data) => {
-                    font_data = data;
-                    break;
-                },
-                Err(_) => {},
+            if let Ok(data) = std::fs::read(path) {
+                font_data = data;
+                break;
             }
         }
         config_big.size_pixels = 24.;
