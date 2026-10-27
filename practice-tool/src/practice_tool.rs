@@ -74,6 +74,7 @@ pub(crate) struct PracticeTool {
     icons: Icons,
     config_editor: ConfigEditor<Config>,
     config_msg: Option<String>,
+    font_fallback: crate::fonts::FontFallback,
 
     position_bufs: [String; 4],
     position_prev: [f32; 3],
@@ -260,6 +261,7 @@ impl PracticeTool {
             fonts: None,
             icons: Icons::default(),
             config_editor: ConfigEditor::new(config_path()),
+            font_fallback: crate::fonts::FontFallback::default(),
             ui_state: UiState::Closed,
             config_msg,
             position_prev: Default::default(),
@@ -819,6 +821,7 @@ impl PracticeTool {
                     ui.text("");
                 }
                 for l in self.log.iter().rev().take(3).rev() {
+                    crate::fonts::request_text(ui, &l.1);
                     ui.text(&l.1);
                 }
                 ui.set_scroll_here_y();
@@ -850,7 +853,8 @@ impl PracticeTool {
 }
 
 impl ImguiRenderLoop for PracticeTool {
-    fn before_render(&mut self, ctx: &mut Context, _: &mut dyn RenderContext) {
+    fn before_render(&mut self, ctx: &mut Context, renderer: &mut dyn RenderContext) {
+        self.font_fallback.update(ctx, renderer);
         self.release_queue.drain(..).for_each(|key| {
             ctx.io_mut().add_key_event(key, false);
         });
@@ -928,22 +932,32 @@ impl ImguiRenderLoop for PracticeTool {
                 .ok(),
         );
 
+        self.font_fallback.reset();
         let fonts = ctx.fonts();
         self.fonts = Some(FontIDs {
             small: fonts.add_font(&[FontSource::TtfData {
                 data: include_bytes!("../../lib/data/ComicMono.ttf"),
                 size_pixels: 11.,
-                config: None,
+                config: Some(FontConfig {
+                    glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
+                    ..Default::default()
+                }),
             }]),
             normal: fonts.add_font(&[FontSource::TtfData {
                 data: include_bytes!("../../lib/data/ComicMono.ttf"),
                 size_pixels: 18.,
-                config: None,
+                config: Some(FontConfig {
+                    glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
+                    ..Default::default()
+                }),
             }]),
             big: fonts.add_font(&[FontSource::TtfData {
                 data: include_bytes!("../../lib/data/ComicMono.ttf"),
                 size_pixels: 24.,
-                config: None,
+                config: Some(FontConfig {
+                    glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
+                    ..Default::default()
+                }),
             }]),
         });
     }

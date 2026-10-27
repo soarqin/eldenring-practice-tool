@@ -229,6 +229,7 @@ impl CfgCommand {
             CfgCommand::ItemSpawner { hotkey_load } => Box::new(ItemSpawner::new(
                 chains.func_item_inject,
                 chains.base_addresses.map_item_man,
+                GameData::new(&chains.base_addresses),
                 &chains.gravity,
                 hotkey_load.into_option(),
                 settings.display,
@@ -268,6 +269,8 @@ impl CfgCommand {
                 chains.func_warp,
                 &chains.warp1,
                 &chains.warp2,
+                GameData::new(&chains.base_addresses),
+                &chains.gravity,
                 settings.display,
             )),
             CfgCommand::Target { hotkey } => Box::new(Target::new(
