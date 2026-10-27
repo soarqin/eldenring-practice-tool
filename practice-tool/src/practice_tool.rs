@@ -934,32 +934,20 @@ impl ImguiRenderLoop for PracticeTool {
 
         self.font_fallback.reset();
         let fonts = ctx.fonts();
-        self.fonts = Some(FontIDs {
-            small: fonts.add_font(&[FontSource::TtfData {
+        // Every glyph of the built-in font takes priority over system
+        // fallbacks.
+        let mut comic_mono = |size_pixels| {
+            fonts.add_font(&[FontSource::TtfData {
                 data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 11.,
+                size_pixels,
                 config: Some(FontConfig {
                     glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
                     ..Default::default()
                 }),
-            }]),
-            normal: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 18.,
-                config: Some(FontConfig {
-                    glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
-                    ..Default::default()
-                }),
-            }]),
-            big: fonts.add_font(&[FontSource::TtfData {
-                data: include_bytes!("../../lib/data/ComicMono.ttf"),
-                size_pixels: 24.,
-                config: Some(FontConfig {
-                    glyph_ranges: FontGlyphRanges::from_slice(&[0x20, 0xffff, 0]),
-                    ..Default::default()
-                }),
-            }]),
-        });
+            }])
+        };
+        self.fonts =
+            Some(FontIDs { small: comic_mono(11.), normal: comic_mono(18.), big: comic_mono(24.) });
     }
 }
 

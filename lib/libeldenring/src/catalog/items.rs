@@ -146,6 +146,12 @@ fn goods_category(
     })
 }
 
+/// Arrows, greatarrows, bolts and greatbolts: no upgrades, listed as
+/// ammunition.
+fn is_ammunition(weapon_type: u16) -> bool {
+    matches!(weapon_type, 81 | 83 | 85 | 86)
+}
+
 fn unused_name(name: &str) -> bool {
     name.starts_with("[ERROR]") || name.starts_with("[ERR]")
 }
@@ -221,11 +227,7 @@ pub(super) fn read(params: &ParamTables, messages: &Messages) -> Option<Vec<Item
         let kind: u16 = at(&row, weapon::TYPE)?;
         weapon_variants.entry(id - id % 10000).or_default().push(ItemVariant {
             affinity: id % 10000,
-            max_upgrade: if matches!(kind, 81 | 83 | 85 | 86) {
-                0
-            } else {
-                *max_levels.get(&path).unwrap_or(&0)
-            },
+            max_upgrade: if is_ammunition(kind) { 0 } else { *max_levels.get(&path).unwrap_or(&0) },
         });
     }
 
@@ -240,7 +242,7 @@ pub(super) fn read(params: &ParamTables, messages: &Messages) -> Option<Vec<Item
         let unused = unused_name(&name) || id == 33290000;
         let category = if unused {
             ItemCategory::Unused
-        } else if matches!(kind, 81 | 83 | 85 | 86) {
+        } else if is_ammunition(kind) {
             ItemCategory::Ammunition
         } else {
             ItemCategory::Weapons

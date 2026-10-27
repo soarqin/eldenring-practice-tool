@@ -7,11 +7,12 @@ use std::fs::File;
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::ptr;
+use std::time::{Duration, Instant};
 
 use hudhook::tracing::warn;
 use hudhook::RenderContext;
 use imgui::internal::RawCast;
-use imgui::{sys, Context, Ui};
+use imgui::{sys, Context, TextureId, Ui};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use windows::core::{w, PCWSTR};
@@ -27,6 +28,11 @@ static REQUESTS: Lazy<Mutex<BTreeSet<(usize, char)>>> = Lazy::new(Mutex::default
 const ATLAS_WIDTH: i32 = 2048;
 const POOL_WIDTH: u32 = 2046;
 const POOL_HEIGHT: u32 = 1024;
+// hudhook replaces the whole texture and keeps every upload buffer, so glyphs
+// added together share one upload once requests settle. Until then they are
+// drawn from still transparent pool space.
+const UPLOAD_SETTLE: Duration = Duration::from_millis(200);
+const UPLOAD_MAX_DELAY: Duration = Duration::from_secs(1);
 
 pub(crate) fn request_text(ui: &Ui, text: &str) {
     let font = ui.current_font() as *const imgui::Font as *mut sys::ImFont;
@@ -394,8 +400,13 @@ pub(crate) struct FontFallback {
     unavailable: BTreeSet<(usize, char)>,
     pool: Option<i32>,
     shelf: Shelf,
-    upload_pending: bool,
-    uploaded: bool,
+    /// Rebuilding the atlas resets its texture ID to the original font
+    /// texture, which is too small for the pool.
+    texture: Option<TextureId>,
+    /// First and latest glyph additions that are not uploaded yet.
+    pending: Option<(Instant, Instant)>,
+    /// The atlas layout changed; upload before it is drawn.
+    rebuilt: bool,
 }
 
 impl FontFallback {
@@ -405,8 +416,12 @@ impl FontFallback {
     }
 
     pub(crate) fn update(&mut self, ctx: &mut Context, renderer: &mut dyn RenderContext) {
+        self.update_at(ctx, renderer, Instant::now());
+    }
+
+    fn update_at(&mut self, ctx: &mut Context, renderer: &mut dyn RenderContext, now: Instant) {
         let requested = std::mem::take(&mut *REQUESTS.lock());
-        if requested.is_empty() && !self.upload_pending {
+        if requested.is_empty() && self.pending.is_none() && !self.rebuilt {
             return;
         }
         let links = self.links.get_or_insert_with(font_links);
@@ -441,18 +456,24 @@ impl FontFallback {
         for ((font, source), characters) in batches {
             let font = font as *mut sys::ImFont;
             let glyphs = self.sources[&source].as_ref().unwrap().rasterize(font, &characters);
+            // GDI can report a glyph that ImGui's builder does not produce.
+            // Visible text requests it every frame; do not rasterize it again.
+            for &character in &characters {
+                if !glyphs.iter().any(|glyph| glyph.character == character) {
+                    self.unavailable.insert((font as usize, character));
+                }
+            }
             for glyph in glyphs {
                 let character = glyph.character;
                 let (width, height) = (glyph.width, glyph.height);
                 let position = self.shelf.allocate(width.max(1), height.max(1)).or_else(|| {
                     // Drop old fallback glyphs rather than permanently losing
-                    // new characters when changing locales
-                    // or cycling font sizes. Visible text
-                    // requests the evicted glyphs again next frame.
+                    // new characters when changing locales or cycling font
+                    // sizes. Visible text requests evicted glyphs again.
                     self.shelf = Shelf::default();
                     ctx.fonts().clear_tex_data();
                     ctx.fonts().build_rgba32_texture();
-                    self.upload_pending = true;
+                    self.rebuilt = true;
                     self.shelf.allocate(width.max(1), height.max(1))
                 });
                 let Some((x, y)) = position else {
@@ -471,6 +492,7 @@ impl FontFallback {
                     });
                     atlas.clear_tex_data();
                     atlas.build_rgba32_texture();
+                    self.rebuilt = true;
                 }
                 unsafe {
                     let raw = atlas.raw_mut();
@@ -498,7 +520,6 @@ impl FontFallback {
                             pixels[pixel..pixel + 4].copy_from_slice(&[255, 255, 255, alpha]);
                         }
                     }
-
                     sys::ImFont_AddGlyph(
                         font,
                         ptr::null(),
@@ -515,31 +536,38 @@ impl FontFallback {
                     );
                 }
                 changed.insert(font as usize);
-                self.upload_pending = true;
             }
+        }
+        if !changed.is_empty() {
+            self.pending = Some((self.pending.map_or(now, |(first, _)| first), now));
         }
         for font in changed {
             unsafe { sys::ImFont_BuildLookupTable(font as *mut sys::ImFont) };
         }
-        if self.upload_pending {
+        let settled = self.pending.is_some_and(|(first, last)| {
+            now.duration_since(last) >= UPLOAD_SETTLE
+                || now.duration_since(first) >= UPLOAD_MAX_DELAY
+        });
+        if self.rebuilt || settled {
             let atlas = ctx.fonts();
-            let id = atlas.tex_id;
             let texture = atlas.build_rgba32_texture();
-            let result = if self.uploaded {
-                renderer
+            let result = match self.texture {
+                Some(id) => renderer
                     .replace_texture(id, texture.data, texture.width, texture.height)
-                    .map(|_| id)
-            } else {
-                renderer.load_texture(texture.data, texture.width, texture.height)
+                    .map(|()| id),
+                None => renderer.load_texture(texture.data, texture.width, texture.height),
             };
             match result {
                 Ok(id) => {
-                    atlas.tex_id = id;
-                    self.uploaded = true;
-                    self.upload_pending = false;
+                    self.texture = Some(id);
+                    self.pending = None;
+                    self.rebuilt = false;
                 },
                 Err(error) => warn!("Could not upload fallback glyphs: {error}"),
             }
+        }
+        if let Some(id) = self.texture {
+            ctx.fonts().tex_id = id;
         }
     }
 }
@@ -605,7 +633,6 @@ mod tests {
         }]);
         let font = atlas.get_font(id).unwrap() as *const imgui::Font as *mut sys::ImFont;
         atlas.build_alpha8_texture();
-
         unsafe {
             let mut config = *(*font).ConfigData;
             config.FontData = data.as_ptr() as *mut _;
@@ -689,11 +716,13 @@ mod tests {
 
             fn replace_texture(
                 &mut self,
-                _: imgui::TextureId,
+                texture: imgui::TextureId,
                 _: &[u8],
                 width: u32,
                 height: u32,
             ) -> windows::core::Result<()> {
+                // ID 0 is hudhook's original font texture, which is smaller.
+                assert_eq!(texture, imgui::TextureId::new(1));
                 assert_eq!((width, height), self.size);
                 self.replacements += 1;
                 Ok(())
@@ -727,18 +756,25 @@ mod tests {
             ..Default::default()
         };
         let mut renderer = Renderer { loads: 0, replacements: 0, size: (0, 0) };
+        let start = Instant::now();
+        let at = |milliseconds| start + Duration::from_millis(milliseconds);
+        let request = |text: &str| {
+            REQUESTS.lock().extend(
+                fonts.iter().flat_map(|&font| text.chars().map(move |c| (font as usize, c))),
+            )
+        };
         REQUESTS.lock().clear();
-        REQUESTS.lock().extend(fonts.iter().map(|&font| (font as usize, 'A')));
-        fallback.update(&mut ctx, &mut renderer);
+        request("A");
+        fallback.update_at(&mut ctx, &mut renderer, at(0));
         assert!(fallback.pool.is_none());
         assert_eq!(renderer.loads, 0);
         assert!(fallback.sources.is_empty());
 
-        REQUESTS
-            .lock()
-            .extend(fonts.iter().flat_map(|&font| [(font as usize, '中'), (font as usize, '格')]));
-        fallback.update(&mut ctx, &mut renderer);
+        // Allocating the pool changes the atlas layout: upload immediately.
+        request("中格");
+        fallback.update_at(&mut ctx, &mut renderer, at(0));
         assert_eq!(renderer.loads, 1);
+        assert_eq!(ctx.fonts().tex_id, imgui::TextureId::new(1));
         assert!(renderer.size.0 <= 2048 && renderer.size.1 <= 2048);
         assert_eq!(fallback.sources.len(), 1);
         let source = fallback.sources[&1].as_ref().unwrap();
@@ -751,20 +787,35 @@ mod tests {
             assert!(unsafe { sys::ImFont_FindGlyphNoFallback(font, '文' as u32).is_null() });
         }
 
+        // New glyphs in fresh pool space share one upload after requests
+        // settle.
         let additional: Vec<_> = "传送宁姆格福王之卢恩暗月大剑中文".chars().collect();
-        REQUESTS.lock().extend(
-            fonts.iter().flat_map(|&font| additional.iter().map(move |&c| (font as usize, c))),
-        );
-        fallback.update(&mut ctx, &mut renderer);
-        assert_eq!((renderer.loads, renderer.replacements), (1, 1));
+        request(&additional.iter().collect::<String>());
+        fallback.update_at(&mut ctx, &mut renderer, at(10));
         assert_original_glyphs(&mut ctx, &fonts, &original, &additional);
-        fallback.update(&mut ctx, &mut renderer);
+        fallback.update_at(&mut ctx, &mut renderer, at(100));
+        assert_eq!((renderer.loads, renderer.replacements), (1, 0));
+        fallback.update_at(&mut ctx, &mut renderer, at(210));
+        assert_eq!((renderer.loads, renderer.replacements), (1, 1));
+        fallback.update_at(&mut ctx, &mut renderer, at(1000));
         assert_eq!((renderer.loads, renderer.replacements), (1, 1));
 
+        // A steady stream of new glyphs is still uploaded within the maximum
+        // delay.
+        for (index, character) in "一二三四五六七八九十百".chars().enumerate() {
+            request(&character.to_string());
+            fallback.update_at(&mut ctx, &mut renderer, at(2000 + 100 * index as u64));
+            let expected = if index < 10 { 1 } else { 2 };
+            assert_eq!((renderer.loads, renderer.replacements), (1, expected));
+        }
+
+        // Eviction rebuilds the atlas, which resets its texture ID. The pool
+        // texture must be replaced and kept in use immediately.
         fallback.shelf.y = POOL_HEIGHT;
-        REQUESTS.lock().extend(fonts.iter().map(|&font| (font as usize, '新')));
-        fallback.update(&mut ctx, &mut renderer);
-        assert_eq!((renderer.loads, renderer.replacements), (1, 2));
+        request("新");
+        fallback.update_at(&mut ctx, &mut renderer, at(4000));
+        assert_eq!((renderer.loads, renderer.replacements), (1, 3));
+        assert_eq!(ctx.fonts().tex_id, imgui::TextureId::new(1));
         assert_original_glyphs(&mut ctx, &fonts, &original, &['新']);
         for &font in &fonts {
             assert!(!fallback.unavailable.contains(&(font as usize, '新')));
