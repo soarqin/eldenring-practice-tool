@@ -820,9 +820,14 @@ impl PracticeTool {
                 for _ in 0..5 {
                     ui.text("");
                 }
-                for l in self.log.iter().rev().take(3).rev() {
+                for l in self.log.iter_mut().rev().take(3).rev() {
                     crate::fonts::request_text(ui, &l.1);
-                    ui.text(&l.1);
+                    if crate::fonts::text_ready(ui, &l.1) {
+                        ui.text(&l.1);
+                    } else {
+                        l.0 = Instant::now();
+                        ui.text("Loading...");
+                    }
                 }
                 ui.set_scroll_here_y();
             });

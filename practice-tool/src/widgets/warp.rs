@@ -3,11 +3,12 @@ use std::time::{Duration, Instant};
 
 use hudhook::tracing::info;
 use imgui::sys::{igGetCursorPosX, igGetCursorPosY, igGetWindowPos, igSetNextWindowPos, ImVec2};
-use imgui::{Condition, InputText, WindowFlags};
+use imgui::{Condition, WindowFlags};
 use libeldenring::prelude::*;
 use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 
+use super::font_text::{display_text, filter_input};
 use super::string_match;
 use crate::fonts::request_text;
 
@@ -132,25 +133,22 @@ impl Widget for Warp {
                 self.refresh();
             }
             let _width = ui.push_item_width(400.);
-            if InputText::new(ui, "##warp-filter", &mut self.filter_string)
-                .hint("Filter...")
-                .build()
-            {
+            if filter_input(ui, "##warp-filter", "Filter...", &mut self.filter_string) {
                 self.filter();
             }
-            request_text(ui, &self.filter_string);
             let preview = self
                 .current_grace
                 .and_then(|i| self.graces.get(i))
                 .map(|g| g.label.as_str())
                 .unwrap_or("No matching graces");
             request_text(ui, preview);
-            if let Some(_combo) = ui.begin_combo("##warp-graces", preview) {
+            if let Some(_combo) = ui.begin_combo("##warp-graces", display_text(ui, preview)) {
                 for &index in &self.filtered {
                     let grace = &self.graces[index];
                     let _id = ui.push_id_int(grace.id as i32);
                     let selected = self.current_grace == Some(index);
-                    if ui.selectable_config(&grace.label).selected(selected).build() {
+                    let label = format!("{}###row", display_text(ui, &grace.label));
+                    if ui.selectable_config(&label).selected(selected).build() {
                         self.current_grace = Some(index);
                     }
                     if ui.is_item_visible() {

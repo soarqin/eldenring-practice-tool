@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use hudhook::tracing::warn;
 use hudhook::RenderContext;
 use imgui::internal::RawCast;
-use imgui::{sys, Context, TextureId, Ui};
+use imgui::{sys, Context, Ui};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use windows::core::{w, PCWSTR};
@@ -21,23 +21,39 @@ use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Memory::*;
 use windows::Win32::System::Registry::*;
 
-static REQUESTS: Lazy<Mutex<BTreeSet<(usize, char)>>> = Lazy::new(Mutex::default);
+mod packing;
 
-// One bounded glyph pool, allocated only after the first missing character.
-// The resulting RGBA atlas is 2048 x 2048 (16 MiB), regardless of font count.
-const ATLAS_WIDTH: i32 = 2048;
-const POOL_WIDTH: u32 = 2046;
-const POOL_HEIGHT: u32 = 1024;
-// hudhook replaces the whole texture and keeps every upload buffer, so glyphs
-// added together share one upload once requests settle. Until then they are
-// drawn from still transparent pool space.
+use packing::RectPacker;
+
+static REQUESTS: Lazy<Mutex<BTreeSet<(usize, char)>>> = Lazy::new(Mutex::default);
+static UNAVAILABLE: Lazy<Mutex<BTreeSet<(usize, char)>>> = Lazy::new(Mutex::default);
+
+// Bound retained glyph pixels without reserving space before it is needed.
+const MAX_ATLAS_SIDE: u32 = 4096;
+// hudhook 0.9.3 has eight descriptors and cannot safely reclaim/grow the
+// heap through its public API. Icons and the original atlas already use two.
+const MAX_TEXTURE_GROWTHS: usize = 6;
 const UPLOAD_SETTLE: Duration = Duration::from_millis(200);
 const UPLOAD_MAX_DELAY: Duration = Duration::from_secs(1);
+const UPLOAD_RETRY: Duration = Duration::from_millis(500);
+
+pub(crate) fn text_ready(ui: &Ui, text: &str) -> bool {
+    let font = ui.current_font() as *const imgui::Font as *mut sys::ImFont;
+    let unavailable = UNAVAILABLE.lock();
+    text.chars().all(|c| {
+        c.is_control()
+            || unsafe { !sys::ImFont_FindGlyphNoFallback(font, c as u32).is_null() }
+            || unavailable.contains(&(font as usize, c))
+    })
+}
 
 pub(crate) fn request_text(ui: &Ui, text: &str) {
     let font = ui.current_font() as *const imgui::Font as *mut sys::ImFont;
+    let unavailable = UNAVAILABLE.lock();
     let missing = text.chars().filter(|&c| {
-        !c.is_control() && unsafe { sys::ImFont_FindGlyphNoFallback(font, c as u32).is_null() }
+        !c.is_control()
+            && !unavailable.contains(&(font as usize, c))
+            && unsafe { sys::ImFont_FindGlyphNoFallback(font, c as u32).is_null() }
     });
     REQUESTS.lock().extend(missing.map(|c| (font as usize, c)));
 }
@@ -365,31 +381,186 @@ fn font_index(data: &[u8], selected_name: &[u8]) -> Option<i32> {
     })
 }
 
-#[derive(Default)]
-struct Shelf {
+struct PendingGlyph {
+    metrics: sys::ImFontGlyph,
     x: u32,
     y: u32,
+    width: u32,
     height: u32,
 }
 
-impl Shelf {
-    fn allocate(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
-        let (width, height) = (width.checked_add(2)?, height.checked_add(2)?);
-        if width > POOL_WIDTH || height > POOL_HEIGHT {
+struct Candidate {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    packing: RectPacker,
+    glyphs: BTreeMap<(usize, char), PendingGlyph>,
+    first: Instant,
+    last: Instant,
+}
+
+impl Candidate {
+    fn new(atlas: &mut imgui::FontAtlas, packing: Option<&RectPacker>, now: Instant) -> Self {
+        let texture = atlas.build_rgba32_texture();
+        let (width, height, pixels) = (texture.width, texture.height, texture.data.to_vec());
+        let packing = packing.cloned().unwrap_or_else(|| unsafe {
+            let raw = atlas.raw();
+            let mut packing = RectPacker::new(width, height);
+            let mut reserve = |x0: u32, y0: u32, x1: u32, y1: u32| {
+                let padding = raw.TexGlyphPadding.max(1) as u32;
+                let (x, y) = (x0.saturating_sub(padding), y0.saturating_sub(padding));
+                let right = x1.saturating_add(padding).min(width);
+                let bottom = y1.saturating_add(padding).min(height);
+                if right > x && bottom > y {
+                    packing.reserve(x, y, right - x, bottom - y);
+                }
+            };
+            for &font in std::slice::from_raw_parts(raw.Fonts.Data, raw.Fonts.Size as usize) {
+                for glyph in
+                    std::slice::from_raw_parts((*font).Glyphs.Data, (*font).Glyphs.Size as usize)
+                {
+                    if glyph.U1 > glyph.U0 && glyph.V1 > glyph.V0 {
+                        reserve(
+                            (glyph.U0 * width as f32).round() as u32,
+                            (glyph.V0 * height as f32).round() as u32,
+                            (glyph.U1 * width as f32).round() as u32,
+                            (glyph.V1 * height as f32).round() as u32,
+                        );
+                    }
+                }
+            }
+            // Custom rectangles also hold ImGui's white pixel, lines and
+            // cursors.
+            for rect in
+                std::slice::from_raw_parts(raw.CustomRects.Data, raw.CustomRects.Size as usize)
+            {
+                if rect.X != u16::MAX && rect.Y != u16::MAX {
+                    reserve(
+                        u32::from(rect.X),
+                        u32::from(rect.Y),
+                        u32::from(rect.X) + u32::from(rect.Width),
+                        u32::from(rect.Y) + u32::from(rect.Height),
+                    );
+                }
+            }
+            packing
+        });
+        Self { width, height, pixels, packing, glyphs: BTreeMap::new(), first: now, last: now }
+    }
+
+    fn allocate(&mut self, width: u32, height: u32, allow_growth: bool) -> Option<(u32, u32)> {
+        let (width, height) = (width.max(1).checked_add(2)?, height.max(1).checked_add(2)?);
+        if width > MAX_ATLAS_SIDE || height > MAX_ATLAS_SIDE {
             return None;
         }
-        if self.x + width > POOL_WIDTH {
-            self.x = 0;
-            self.y += self.height;
-            self.height = 0;
+        loop {
+            if let Some((x, y)) = self.packing.allocate(width, height) {
+                return Some((x + 1, y + 1));
+            }
+            if !allow_growth {
+                return None;
+            }
+            let next_width = (self.width * 2).min(MAX_ATLAS_SIDE);
+            let next_height = (self.height * 2).min(MAX_ATLAS_SIDE);
+            if next_width <= self.width && next_height <= self.height {
+                return None;
+            }
+            // Transparent padding must stay white for ImGui's linear sampler.
+            let mut pixels = vec![255; next_width as usize * next_height as usize * 4];
+            for alpha in pixels.iter_mut().skip(3).step_by(4) {
+                *alpha = 0;
+            }
+            let old_stride = self.width as usize * 4;
+            let new_stride = next_width as usize * 4;
+            for row in 0..self.height as usize {
+                pixels[row * new_stride..row * new_stride + old_stride]
+                    .copy_from_slice(&self.pixels[row * old_stride..(row + 1) * old_stride]);
+            }
+            self.packing.grow(next_width, next_height);
+            self.pixels = pixels;
+            self.width = next_width;
+            self.height = next_height;
         }
-        if self.y + height > POOL_HEIGHT {
-            return None;
+    }
+
+    fn insert(&mut self, font: usize, glyph: Glyph, now: Instant, allow_growth: bool) -> bool {
+        let Some((x, y)) = self.allocate(glyph.width, glyph.height, allow_growth) else {
+            return false;
+        };
+        for row in 0..glyph.height {
+            for column in 0..glyph.width {
+                let alpha = glyph.bitmap[(row * glyph.width + column) as usize];
+                let offset = (((y + row) * self.width + x + column) * 4) as usize;
+                self.pixels[offset..offset + 4].copy_from_slice(&[255, 255, 255, alpha]);
+            }
         }
-        let position = (self.x + 1, self.y + 1);
-        self.x += width;
-        self.height = self.height.max(height);
-        Some(position)
+        self.glyphs.insert((font, glyph.character), PendingGlyph {
+            metrics: glyph.metrics,
+            x,
+            y,
+            width: glyph.width,
+            height: glyph.height,
+        });
+        self.last = now;
+        true
+    }
+
+    fn commit(self, atlas: &mut imgui::FontAtlas, pixels: *mut u32) -> RectPacker {
+        unsafe {
+            let raw = atlas.raw_mut();
+            if (raw.TexWidth, raw.TexHeight) != (self.width as i32, self.height as i32) {
+                let scale_x = raw.TexWidth as f32 / self.width as f32;
+                let scale_y = raw.TexHeight as f32 / self.height as f32;
+                for &font in std::slice::from_raw_parts(raw.Fonts.Data, raw.Fonts.Size as usize) {
+                    for glyph in std::slice::from_raw_parts_mut(
+                        (*font).Glyphs.Data,
+                        (*font).Glyphs.Size as usize,
+                    ) {
+                        glyph.U0 *= scale_x;
+                        glyph.U1 *= scale_x;
+                        glyph.V0 *= scale_y;
+                        glyph.V1 *= scale_y;
+                    }
+                }
+                raw.TexUvWhitePixel.x *= scale_x;
+                raw.TexUvWhitePixel.y *= scale_y;
+                for uv in &mut raw.TexUvLines {
+                    uv.x *= scale_x;
+                    uv.z *= scale_x;
+                    uv.y *= scale_y;
+                    uv.w *= scale_y;
+                }
+            }
+            sys::ImFontAtlas_ClearTexData(raw);
+            raw.TexPixelsRGBA32 = pixels;
+            raw.TexWidth = self.width as i32;
+            raw.TexHeight = self.height as i32;
+            raw.TexUvScale = sys::ImVec2 { x: 1. / self.width as f32, y: 1. / self.height as f32 };
+            raw.TexReady = true;
+
+            let mut changed = BTreeSet::new();
+            for ((font, character), glyph) in self.glyphs {
+                sys::ImFont_AddGlyph(
+                    font as *mut sys::ImFont,
+                    ptr::null(),
+                    character as u32,
+                    glyph.metrics.X0,
+                    glyph.metrics.Y0,
+                    glyph.metrics.X1,
+                    glyph.metrics.Y1,
+                    glyph.x as f32 / self.width as f32,
+                    glyph.y as f32 / self.height as f32,
+                    (glyph.x + glyph.width) as f32 / self.width as f32,
+                    (glyph.y + glyph.height) as f32 / self.height as f32,
+                    glyph.metrics.AdvanceX,
+                );
+                changed.insert(font);
+            }
+            for font in changed {
+                sys::ImFont_BuildLookupTable(font as *mut sys::ImFont);
+            }
+        }
+        self.packing
     }
 }
 
@@ -397,21 +568,16 @@ impl Shelf {
 pub(crate) struct FontFallback {
     links: Option<Vec<FontLink>>,
     sources: BTreeMap<usize, Option<MappedFont>>,
-    unavailable: BTreeSet<(usize, char)>,
-    pool: Option<i32>,
-    shelf: Shelf,
-    /// Rebuilding the atlas resets its texture ID to the original font
-    /// texture, which is too small for the pool.
-    texture: Option<TextureId>,
-    /// First and latest glyph additions that are not uploaded yet.
-    pending: Option<(Instant, Instant)>,
-    /// The atlas layout changed; upload before it is drawn.
-    rebuilt: bool,
+    packing: Option<RectPacker>,
+    candidate: Option<Candidate>,
+    retry_at: Option<Instant>,
+    texture_growths: usize,
 }
 
 impl FontFallback {
     pub(crate) fn reset(&mut self) {
         REQUESTS.lock().clear();
+        UNAVAILABLE.lock().clear();
         *self = Self::default();
     }
 
@@ -421,21 +587,25 @@ impl FontFallback {
 
     fn update_at(&mut self, ctx: &mut Context, renderer: &mut dyn RenderContext, now: Instant) {
         let requested = std::mem::take(&mut *REQUESTS.lock());
-        if requested.is_empty() && self.pending.is_none() && !self.rebuilt {
+        if requested.is_empty() && self.candidate.is_none() {
             return;
         }
-        let links = self.links.get_or_insert_with(font_links);
         let mut faces = BTreeMap::<usize, Option<Face>>::new();
         let mut batches = BTreeMap::<(usize, usize), Vec<char>>::new();
-        let mut changed = BTreeSet::new();
         for (font, character) in requested {
-            if self.unavailable.contains(&(font, character)) {
+            if UNAVAILABLE.lock().contains(&(font, character))
+                || self
+                    .candidate
+                    .as_ref()
+                    .is_some_and(|candidate| candidate.glyphs.contains_key(&(font, character)))
+                || unsafe {
+                    !sys::ImFont_FindGlyphNoFallback(font as *mut sys::ImFont, character as u32)
+                        .is_null()
+                }
+            {
                 continue;
             }
-            let font = font as *mut sys::ImFont;
-            if unsafe { !sys::ImFont_FindGlyphNoFallback(font, character as u32).is_null() } {
-                continue;
-            }
+            let links = self.links.get_or_insert_with(font_links);
             let source = links.iter().enumerate().find_map(|(index, link)| {
                 let face = faces.entry(index).or_insert_with(|| Face::new(&link.face)).as_ref()?;
                 if !face.has_glyph(character) {
@@ -448,129 +618,104 @@ impl FontFallback {
                 Some(index)
             });
             let Some(source) = source else {
-                self.unavailable.insert((font as usize, character));
+                UNAVAILABLE.lock().insert((font, character));
                 continue;
             };
-            batches.entry((font as usize, source)).or_default().push(character);
+            batches.entry((font, source)).or_default().push(character);
         }
         for ((font, source), characters) in batches {
-            let font = font as *mut sys::ImFont;
-            let glyphs = self.sources[&source].as_ref().unwrap().rasterize(font, &characters);
-            // GDI can report a glyph that ImGui's builder does not produce.
-            // Visible text requests it every frame; do not rasterize it again.
-            for &character in &characters {
-                if !glyphs.iter().any(|glyph| glyph.character == character) {
-                    self.unavailable.insert((font as usize, character));
-                }
-            }
-            for glyph in glyphs {
-                let character = glyph.character;
-                let (width, height) = (glyph.width, glyph.height);
-                let position = self.shelf.allocate(width.max(1), height.max(1)).or_else(|| {
-                    // Drop old fallback glyphs rather than permanently losing
-                    // new characters when changing locales or cycling font
-                    // sizes. Visible text requests evicted glyphs again.
-                    self.shelf = Shelf::default();
-                    ctx.fonts().clear_tex_data();
-                    ctx.fonts().build_rgba32_texture();
-                    self.rebuilt = true;
-                    self.shelf.allocate(width.max(1), height.max(1))
-                });
-                let Some((x, y)) = position else {
-                    self.unavailable.insert((font as usize, character));
+            let mut glyphs = self.sources[&source]
+                .as_ref()
+                .unwrap()
+                .rasterize(font as *mut sys::ImFont, &characters)
+                .into_iter()
+                .peekable();
+            // Rasterization preserves request order, including when glyphs
+            // fail.
+            for character in characters {
+                let Some(glyph) = glyphs.next_if(|glyph| glyph.character == character) else {
+                    UNAVAILABLE.lock().insert((font, character));
                     continue;
                 };
-                let atlas = ctx.fonts();
-                if self.pool.is_none() {
-                    atlas.tex_desired_width = ATLAS_WIDTH;
-                    self.pool = Some(unsafe {
-                        sys::ImFontAtlas_AddCustomRectRegular(
-                            atlas.raw_mut(),
-                            POOL_WIDTH as i32,
-                            POOL_HEIGHT as i32,
-                        )
-                    });
-                    atlas.clear_tex_data();
-                    atlas.build_rgba32_texture();
-                    self.rebuilt = true;
+                let candidate = self
+                    .candidate
+                    .get_or_insert_with(|| Candidate::new(ctx.fonts(), self.packing.as_ref(), now));
+                if !candidate.insert(font, glyph, now, self.texture_growths < MAX_TEXTURE_GROWTHS) {
+                    UNAVAILABLE.lock().insert((font, character));
+                    warn!("Font atlas capacity limit reached; using the fallback character");
                 }
-                unsafe {
-                    let raw = atlas.raw_mut();
-                    let rect = &*sys::ImFontAtlas_GetCustomRectByIndex(raw, self.pool.unwrap());
-                    let (x, y) = (x + u32::from(rect.X), y + u32::from(rect.Y));
-                    let tex_width = raw.TexWidth as u32;
-                    let tex_height = raw.TexHeight as u32;
-                    if rect.X == u16::MAX
-                        || rect.Y == u16::MAX
-                        || x + width > tex_width
-                        || y + height > tex_height
-                    {
-                        self.unavailable.insert((font as usize, character));
-                        warn!("Could not pack fallback glyphs into the font atlas");
-                        continue;
-                    }
-                    let pixels = std::slice::from_raw_parts_mut(
-                        raw.TexPixelsRGBA32.cast::<u8>(),
-                        (tex_width * tex_height * 4) as usize,
-                    );
-                    for row in 0..height {
-                        for column in 0..width {
-                            let alpha = glyph.bitmap[(row * width + column) as usize];
-                            let pixel = (((y + row) * tex_width + x + column) * 4) as usize;
-                            pixels[pixel..pixel + 4].copy_from_slice(&[255, 255, 255, alpha]);
-                        }
-                    }
-                    sys::ImFont_AddGlyph(
-                        font,
-                        ptr::null(),
-                        character as u32,
-                        glyph.metrics.X0,
-                        glyph.metrics.Y0,
-                        glyph.metrics.X1,
-                        glyph.metrics.Y1,
-                        x as f32 / tex_width as f32,
-                        y as f32 / tex_height as f32,
-                        (x + width) as f32 / tex_width as f32,
-                        (y + height) as f32 / tex_height as f32,
-                        glyph.metrics.AdvanceX,
-                    );
-                }
-                changed.insert(font as usize);
             }
         }
-        if !changed.is_empty() {
-            self.pending = Some((self.pending.map_or(now, |(first, _)| first), now));
+
+        let Some(candidate) = self.candidate.as_ref() else {
+            return;
+        };
+        if candidate.glyphs.is_empty() {
+            self.candidate = None;
+            return;
         }
-        for font in changed {
-            unsafe { sys::ImFont_BuildLookupTable(font as *mut sys::ImFont) };
+        if self.retry_at.is_some_and(|retry| now < retry)
+            || (now.duration_since(candidate.last) < UPLOAD_SETTLE
+                && now.duration_since(candidate.first) < UPLOAD_MAX_DELAY)
+        {
+            return;
         }
-        let settled = self.pending.is_some_and(|(first, last)| {
-            now.duration_since(last) >= UPLOAD_SETTLE
-                || now.duration_since(first) >= UPLOAD_MAX_DELAY
-        });
-        if self.rebuilt || settled {
-            let atlas = ctx.fonts();
-            let texture = atlas.build_rgba32_texture();
-            let result = match self.texture {
-                Some(id) => renderer
-                    .replace_texture(id, texture.data, texture.width, texture.height)
-                    .map(|()| id),
-                None => renderer.load_texture(texture.data, texture.width, texture.height),
-            };
-            match result {
-                Ok(id) => {
-                    self.texture = Some(id);
-                    self.pending = None;
-                    self.rebuilt = false;
-                },
-                Err(error) => warn!("Could not upload fallback glyphs: {error}"),
-            }
+
+        let resized = unsafe {
+            let atlas = ctx.fonts().raw();
+            (atlas.TexWidth, atlas.TexHeight) != (candidate.width as i32, candidate.height as i32)
+        };
+        if resized && self.texture_growths == MAX_TEXTURE_GROWTHS {
+            UNAVAILABLE.lock().extend(candidate.glyphs.keys().copied());
+            self.candidate = None;
+            self.retry_at = None;
+            warn!("Font atlas texture limit reached; using the fallback character");
+            return;
         }
-        if let Some(id) = self.texture {
-            ctx.fonts().tex_id = id;
+
+        // Reserve ImGui-owned pixels before changing the GPU texture. A failed
+        // upload must leave all live glyphs, UVs and CPU pixels intact.
+        let pixels = unsafe { sys::igMemAlloc(candidate.pixels.len()).cast::<u32>() };
+        if pixels.is_null() {
+            self.retry_at = Some(now + UPLOAD_RETRY);
+            warn!("Could not allocate font atlas pixels");
+            return;
+        }
+        unsafe {
+            ptr::copy_nonoverlapping(
+                candidate.pixels.as_ptr(),
+                pixels.cast(),
+                candidate.pixels.len(),
+            );
+        }
+        let texture = ctx.fonts().tex_id;
+        let uploaded = if resized {
+            // Keep one active atlas. Old textures remain owned by hudhook;
+            // count failed loads too, since they may already own a descriptor.
+            self.texture_growths += 1;
+            renderer.load_texture(&candidate.pixels, candidate.width, candidate.height)
+        } else {
+            renderer
+                .replace_texture(texture, &candidate.pixels, candidate.width, candidate.height)
+                .map(|()| texture)
+        };
+        match uploaded {
+            Ok(texture) => {
+                self.packing = Some(self.candidate.take().unwrap().commit(ctx.fonts(), pixels));
+                ctx.fonts().tex_id = texture;
+                self.retry_at = None;
+            },
+            Err(error) => {
+                unsafe { sys::igMemFree(pixels.cast()) };
+                self.retry_at = Some(now + UPLOAD_RETRY);
+                warn!("Could not upload fallback glyphs: {error}");
+            },
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) static IMGUI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {
@@ -684,51 +829,70 @@ mod tests {
     }
 
     #[test]
-    fn glyph_pool_never_allocates_outside_its_fixed_bounds() {
-        let mut pool = Shelf::default();
-        assert!(pool.allocate(POOL_WIDTH, 10).is_none());
-        for _ in 0..10000 {
-            if let Some((x, y)) = pool.allocate(20, 24) {
-                assert!(x + 20 < POOL_WIDTH && y + 24 < POOL_HEIGHT);
-            }
-        }
-        assert!(pool.allocate(20, 24).is_none());
-    }
-
-    #[test]
-    fn rendering_matches_original_at_all_sizes_and_stays_lazy() {
+    fn glyphs_publish_only_after_upload_and_survive_growth() {
+        let _lock = IMGUI_TEST_LOCK.lock().unwrap();
         struct Renderer {
+            attempts: usize,
+            uploads: usize,
             loads: usize,
-            replacements: usize,
+            texture: imgui::TextureId,
             size: (u32, u32),
+            pixels: Vec<u8>,
+            fail: bool,
+            unpublished: Vec<(usize, char)>,
+        }
+        impl Renderer {
+            fn upload(
+                &mut self,
+                pixels: &[u8],
+                width: u32,
+                height: u32,
+            ) -> windows::core::Result<()> {
+                for &(font, character) in &self.unpublished {
+                    assert!(unsafe {
+                        sys::ImFont_FindGlyphNoFallback(font as *mut sys::ImFont, character as u32)
+                            .is_null()
+                    });
+                }
+                self.attempts += 1;
+                if self.fail {
+                    return Err(windows::core::Error::from_hresult(windows::core::HRESULT(-1)));
+                }
+                self.size = (width, height);
+                self.pixels = pixels.to_vec();
+                self.uploads += 1;
+                Ok(())
+            }
         }
         impl RenderContext for Renderer {
             fn load_texture(
                 &mut self,
-                _: &[u8],
+                pixels: &[u8],
                 width: u32,
                 height: u32,
             ) -> windows::core::Result<imgui::TextureId> {
                 self.loads += 1;
-                self.size = (width, height);
-                Ok(imgui::TextureId::new(1))
+                self.upload(pixels, width, height)?;
+                self.texture = imgui::TextureId::new(7 + self.loads);
+                Ok(self.texture)
             }
 
             fn replace_texture(
                 &mut self,
                 texture: imgui::TextureId,
-                _: &[u8],
+                pixels: &[u8],
                 width: u32,
                 height: u32,
             ) -> windows::core::Result<()> {
-                // ID 0 is hudhook's original font texture, which is smaller.
-                assert_eq!(texture, imgui::TextureId::new(1));
+                assert_eq!(texture, self.texture);
+                // The unmodified DX12 backend rejects dimension changes.
                 assert_eq!((width, height), self.size);
-                self.replacements += 1;
-                Ok(())
+                self.upload(pixels, width, height)
             }
         }
+
         let mut ctx = Context::create();
+        ctx.set_ini_filename(None);
         let ids: Vec<_> = [11., 18., 24.]
             .into_iter()
             .map(|size| {
@@ -742,7 +906,10 @@ mod tests {
                 }])
             })
             .collect();
-        ctx.fonts().build_rgba32_texture();
+        let texture = ctx.fonts().build_rgba32_texture();
+        let initial_size = (texture.width, texture.height);
+        let initial_pixels = texture.data.to_vec();
+        ctx.fonts().tex_id = imgui::TextureId::new(7);
         let fonts: Vec<_> = ids
             .iter()
             .map(|&id| ctx.fonts().get_font(id).unwrap() as *const imgui::Font as *mut sys::ImFont)
@@ -755,7 +922,16 @@ mod tests {
             )),
             ..Default::default()
         };
-        let mut renderer = Renderer { loads: 0, replacements: 0, size: (0, 0) };
+        let mut renderer = Renderer {
+            attempts: 0,
+            uploads: 0,
+            loads: 0,
+            texture: imgui::TextureId::new(7),
+            size: initial_size,
+            pixels: initial_pixels.clone(),
+            fail: false,
+            unpublished: Vec::new(),
+        };
         let start = Instant::now();
         let at = |milliseconds| start + Duration::from_millis(milliseconds);
         let request = |text: &str| {
@@ -763,19 +939,31 @@ mod tests {
                 fonts.iter().flat_map(|&font| text.chars().map(move |c| (font as usize, c))),
             )
         };
+        let keys = |text: &str| -> Vec<_> {
+            fonts.iter().flat_map(|&font| text.chars().map(move |c| (font as usize, c))).collect()
+        };
         REQUESTS.lock().clear();
+        UNAVAILABLE.lock().clear();
+
         request("A");
         fallback.update_at(&mut ctx, &mut renderer, at(0));
-        assert!(fallback.pool.is_none());
-        assert_eq!(renderer.loads, 0);
+        assert!(fallback.candidate.is_none());
+        assert!(fallback.packing.is_none());
         assert!(fallback.sources.is_empty());
+        assert_eq!(renderer.attempts, 0);
 
-        // Allocating the pool changes the atlas layout: upload immediately.
         request("中格");
         fallback.update_at(&mut ctx, &mut renderer, at(0));
-        assert_eq!(renderer.loads, 1);
-        assert_eq!(ctx.fonts().tex_id, imgui::TextureId::new(1));
-        assert!(renderer.size.0 <= 2048 && renderer.size.1 <= 2048);
+        renderer.unpublished = keys("中格");
+        assert!(fallback.candidate.is_some());
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, initial_pixels);
+        assert_eq!(renderer.uploads, 0);
+        // Repeated visible requests must not rebuild glyphs or postpone upload.
+        request("中格");
+        fallback.update_at(&mut ctx, &mut renderer, at(100));
+        fallback.update_at(&mut ctx, &mut renderer, at(200));
+        assert_eq!(renderer.uploads, 1);
+        renderer.unpublished.clear();
         assert_eq!(fallback.sources.len(), 1);
         let source = fallback.sources[&1].as_ref().unwrap();
         let original: Vec<_> = [11., 18., 24.]
@@ -783,44 +971,133 @@ mod tests {
             .map(|size| original_glyphs(size, source.data(), source.index))
             .collect();
         assert_original_glyphs(&mut ctx, &fonts, &original, &['中', '格']);
-        for &font in &fonts {
-            assert!(unsafe { sys::ImFont_FindGlyphNoFallback(font, '文' as u32).is_null() });
-        }
 
-        // New glyphs in fresh pool space share one upload after requests
-        // settle.
-        let additional: Vec<_> = "传送宁姆格福王之卢恩暗月大剑中文".chars().collect();
-        request(&additional.iter().collect::<String>());
-        fallback.update_at(&mut ctx, &mut renderer, at(10));
-        assert_original_glyphs(&mut ctx, &fonts, &original, &additional);
-        fallback.update_at(&mut ctx, &mut renderer, at(100));
-        assert_eq!((renderer.loads, renderer.replacements), (1, 0));
+        let additional = "传送宁姆格福王之卢恩暗月大剑中文";
+        let committed_size = renderer.size;
+        let committed_pixels = renderer.pixels.clone();
+        request(additional);
         fallback.update_at(&mut ctx, &mut renderer, at(210));
-        assert_eq!((renderer.loads, renderer.replacements), (1, 1));
-        fallback.update_at(&mut ctx, &mut renderer, at(1000));
-        assert_eq!((renderer.loads, renderer.replacements), (1, 1));
+        renderer.unpublished = keys("传送文");
+        renderer.fail = true;
+        fallback.update_at(&mut ctx, &mut renderer, at(410));
+        assert_eq!((renderer.attempts, renderer.uploads), (2, 1));
+        assert_eq!(renderer.size, committed_size);
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, committed_pixels);
+        assert_original_glyphs(&mut ctx, &fonts, &original, &['中', '格']);
+        request(additional);
+        fallback.update_at(&mut ctx, &mut renderer, at(600));
+        assert_eq!(renderer.attempts, 2);
+        renderer.fail = false;
+        fallback.update_at(&mut ctx, &mut renderer, at(910));
+        assert_eq!((renderer.attempts, renderer.uploads), (3, 2));
+        renderer.unpublished.clear();
+        assert_original_glyphs(
+            &mut ctx,
+            &fonts,
+            &original,
+            &additional.chars().collect::<Vec<_>>(),
+        );
 
-        // A steady stream of new glyphs is still uploaded within the maximum
-        // delay.
+        let before_size = renderer.size;
+        let before_texture = ctx.fonts().tex_id;
+        let before_growths = fallback.texture_growths;
+        let before_loads = renderer.loads;
+        let before_white = unsafe { ctx.fonts().raw().TexUvWhitePixel };
+        let before_lines = unsafe { ctx.fonts().raw().TexUvLines };
+        // Occupy the current free space to force the next glyph across a
+        // texture-size boundary without rasterizing thousands of characters.
+        assert!(fallback.packing.as_mut().unwrap().reserve(0, 0, before_size.0, before_size.1));
+        request("新");
+        fallback.update_at(&mut ctx, &mut renderer, at(1000));
+        let candidate = fallback.candidate.as_ref().unwrap();
+        assert_ne!((candidate.width, candidate.height), before_size);
+        assert_eq!(renderer.size, before_size);
+        assert_eq!(ctx.fonts().tex_id, before_texture);
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, renderer.pixels);
+        let pending = &candidate.glyphs[&(fonts[0] as usize, '新')];
+        let padding = (((pending.y - 1) * candidate.width + pending.x - 1) * 4) as usize;
+        assert_eq!(&candidate.pixels[padding..padding + 4], &[255, 255, 255, 0]);
+        renderer.unpublished = keys("新");
+        renderer.fail = true;
+        fallback.update_at(&mut ctx, &mut renderer, at(1200));
+        assert_eq!(renderer.uploads, 2);
+        assert_eq!(renderer.loads, before_loads + 1);
+        assert_eq!(fallback.texture_growths, before_growths + 1);
+        assert_eq!(ctx.fonts().tex_id, before_texture);
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, renderer.pixels);
+        fallback.update_at(&mut ctx, &mut renderer, at(1500));
+        assert_eq!(renderer.loads, before_loads + 1);
+        renderer.fail = false;
+        fallback.update_at(&mut ctx, &mut renderer, at(1700));
+        renderer.unpublished.clear();
+        assert_eq!(renderer.uploads, 3);
+        assert_eq!(renderer.loads, before_loads + 2);
+        assert_eq!(fallback.texture_growths, before_growths + 2);
+        assert_ne!(ctx.fonts().tex_id, before_texture);
+        assert_eq!(ctx.fonts().tex_id, renderer.texture);
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, renderer.pixels);
+        let after_white = unsafe { ctx.fonts().raw().TexUvWhitePixel };
+        assert_eq!(before_white.x * before_size.0 as f32, after_white.x * renderer.size.0 as f32);
+        assert_eq!(before_white.y * before_size.1 as f32, after_white.y * renderer.size.1 as f32);
+        for (before, after) in before_lines.iter().zip(unsafe { ctx.fonts().raw().TexUvLines }) {
+            assert_eq!(before.x * before_size.0 as f32, after.x * renderer.size.0 as f32);
+            assert_eq!(before.y * before_size.1 as f32, after.y * renderer.size.1 as f32);
+            assert_eq!(before.z * before_size.0 as f32, after.z * renderer.size.0 as f32);
+            assert_eq!(before.w * before_size.1 as f32, after.w * renderer.size.1 as f32);
+        }
+        let mut all = additional.chars().collect::<Vec<_>>();
+        all.push('新');
+        assert_original_glyphs(&mut ctx, &fonts, &original, &all);
+
+        // New requests arriving continuously still publish within one second.
         for (index, character) in "一二三四五六七八九十百".chars().enumerate() {
             request(&character.to_string());
             fallback.update_at(&mut ctx, &mut renderer, at(2000 + 100 * index as u64));
-            let expected = if index < 10 { 1 } else { 2 };
-            assert_eq!((renderer.loads, renderer.replacements), (1, expected));
+            assert_eq!(renderer.uploads, if index < 10 { 3 } else { 4 });
         }
-
-        // Eviction rebuilds the atlas, which resets its texture ID. The pool
-        // texture must be replaced and kept in use immediately.
-        fallback.shelf.y = POOL_HEIGHT;
-        request("新");
+        request("😀");
         fallback.update_at(&mut ctx, &mut renderer, at(4000));
-        assert_eq!((renderer.loads, renderer.replacements), (1, 3));
-        assert_eq!(ctx.fonts().tex_id, imgui::TextureId::new(1));
-        assert_original_glyphs(&mut ctx, &fonts, &original, &['新']);
-        for &font in &fonts {
-            assert!(!fallback.unavailable.contains(&(font as usize, '新')));
-        }
+        assert!(fonts.iter().all(|&font| UNAVAILABLE.lock().contains(&(font as usize, '😀'))));
+        assert!(fallback.candidate.is_none());
+        // Exhausting descriptors must still allow uploads into existing holes.
+        let attempts = renderer.attempts;
+        let loads = renderer.loads;
+        let texture = ctx.fonts().tex_id;
+        fallback.texture_growths = MAX_TEXTURE_GROWTHS;
+        let glyph =
+            fallback.sources[&1].as_ref().unwrap().rasterize(fonts[0], &['容']).pop().unwrap();
+        let (width, height) = (glyph.width.max(1) + 2, glyph.height.max(1) + 2);
+        let packing = fallback.packing.as_mut().unwrap();
+        let (x, y) = packing.clone().allocate(width, height).unwrap();
+        // Leave exactly one glyph-sized hole in otherwise occupied space.
+        packing.reserve(0, 0, x, renderer.size.1);
+        packing.reserve(x + width, 0, renderer.size.0 - x - width, renderer.size.1);
+        packing.reserve(0, 0, renderer.size.0, y);
+        packing.reserve(0, y + height, renderer.size.0, renderer.size.1 - y - height);
+        REQUESTS.lock().extend([(fonts[0] as usize, '容'), (fonts[0] as usize, '量')]);
+        fallback.update_at(&mut ctx, &mut renderer, at(4100));
+        assert_eq!(fallback.candidate.as_ref().unwrap().glyphs.len(), 1);
+        fallback.update_at(&mut ctx, &mut renderer, at(4300));
+        assert!(fallback.candidate.is_none());
+        assert_eq!(renderer.attempts, attempts + 1);
+        assert_eq!(renderer.loads, loads);
+        assert_eq!(ctx.fonts().tex_id, texture);
+        assert!(glyph_pixels(ctx.fonts(), fonts[0], '容' as u32).is_some());
+        assert!(!UNAVAILABLE.lock().contains(&(fonts[0] as usize, '容')));
+        assert!(UNAVAILABLE.lock().contains(&(fonts[0] as usize, '量')));
+
+        // The original API may retain a descriptor even after a failed load.
+        // Without holes, settle to a visible fallback without another upload.
+        assert!(fallback.packing.as_mut().unwrap().reserve(0, 0, renderer.size.0, renderer.size.1));
+        request("限");
+        fallback.update_at(&mut ctx, &mut renderer, at(4500));
+        assert!(fallback.candidate.is_none());
+        assert_eq!(renderer.attempts, attempts + 1);
+        assert_eq!(ctx.fonts().tex_id, texture);
+        assert_eq!(ctx.fonts().build_rgba32_texture().data, renderer.pixels);
+        assert!(fonts.iter().all(|&font| UNAVAILABLE.lock().contains(&(font as usize, '限'))));
         fallback.reset();
         assert!(fallback.sources.is_empty());
+        assert!(UNAVAILABLE.lock().is_empty());
     }
 }

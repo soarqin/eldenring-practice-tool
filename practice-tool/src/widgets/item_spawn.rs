@@ -3,12 +3,13 @@ use std::ffi::c_void;
 use std::time::{Duration, Instant};
 
 use imgui::sys::{igGetCursorPosX, igGetCursorPosY, igGetWindowPos, igSetNextWindowPos, ImVec2};
-use imgui::{Condition, InputText, TreeNodeFlags, WindowFlags};
+use imgui::{Condition, TreeNodeFlags, WindowFlags};
 use libeldenring::prelude::*;
 use practice_tool_core::crossbeam_channel::Sender;
 use practice_tool_core::key::Key;
 use practice_tool_core::widgets::{scaling_factor, Widget, BUTTON_HEIGHT, BUTTON_WIDTH};
 
+use super::font_text::{display_text, filter_input};
 use super::string_match;
 use crate::fonts::request_text;
 
@@ -160,7 +161,8 @@ impl ItemSpawner {
     fn render_item(&self, ui: &imgui::Ui, index: usize, selection: &mut Option<usize>) {
         let item = &self.items[index];
         let _id = ui.push_id_int(item.id as i32);
-        if ui.selectable_config(&item.name).selected(self.current == Some(index)).build() {
+        let label = format!("{}###row", display_text(ui, &item.name));
+        if ui.selectable_config(&label).selected(self.current == Some(index)).build() {
             *selection = Some(index);
         }
         if ui.is_item_visible() {
@@ -266,10 +268,12 @@ impl Widget for ItemSpawner {
             {
                 self.refresh();
             }
-            let mut changed = InputText::new(ui, "##item-spawn-filter", &mut self.filter_string)
-                .hint("Filter name or ID...")
-                .build();
-            request_text(ui, &self.filter_string);
+            let mut changed = filter_input(
+                ui,
+                "##item-spawn-filter",
+                "Filter name or ID...",
+                &mut self.filter_string,
+            );
             changed |= ui.combo_simple_string("##item-source", &mut self.source_filter, &[
                 "All items",
                 "Base game",
@@ -304,7 +308,9 @@ impl Widget for ItemSpawner {
                         if category == ItemCategory::Weapons {
                             for (id, name, indices) in self.weapon_groups() {
                                 let _id = ui.push_id_int(id as i32);
-                                let node = ui.tree_node_config(name);
+                                let node = ui
+                                    .tree_node_config("group")
+                                    .label::<&str, _>(display_text(ui, name));
                                 let node = if self.filter_string.is_empty() {
                                     node
                                 } else {
